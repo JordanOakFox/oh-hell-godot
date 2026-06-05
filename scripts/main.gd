@@ -7,6 +7,13 @@ const DEFAULT_PLAYERS := 4
 const CardButtonScript := preload("res://scripts/card_button.gd")
 const FeltBackgroundScript := preload("res://scripts/felt_background.gd")
 const FireworksOverlayScript := preload("res://scripts/fireworks_overlay.gd")
+const SUIT_SYMBOLS := {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
+const SUIT_COLORS := {
+	"S": Color("#171717"),
+	"H": Color("#c8322b"),
+	"D": Color("#e86f22"),
+	"C": Color("#2367c7"),
+}
 
 var state: Dictionary = {}
 var view_state: Dictionary = {}
@@ -26,7 +33,9 @@ var bot_action_key := ""
 var status_label: Label
 var table_label: Label
 var left_stats_label: Label
+var right_info_panel: VBoxContainer
 var right_info_label: Label
+var trump_symbol_label: Label
 var trick_box: HBoxContainer
 var hand_box: Control
 var action_box: HBoxContainer
@@ -191,13 +200,23 @@ func _build_ui() -> void:
 	action_box.add_theme_constant_override("separation", 8)
 	center_column.add_child(action_box)
 
+	right_info_panel = VBoxContainer.new()
+	right_info_panel.custom_minimum_size = Vector2(240, 0)
+	right_info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_info_panel.add_theme_constant_override("separation", 12)
+	play_row.add_child(right_info_panel)
+
 	right_info_label = Label.new()
 	right_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right_info_label.add_theme_font_size_override("font_size", 16)
 	right_info_label.add_theme_color_override("font_color", Color("#f7f1e3"))
-	right_info_label.custom_minimum_size = Vector2(240, 0)
-	right_info_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	play_row.add_child(right_info_label)
+	right_info_panel.add_child(right_info_label)
+
+	trump_symbol_label = Label.new()
+	trump_symbol_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trump_symbol_label.add_theme_font_size_override("font_size", 76)
+	trump_symbol_label.custom_minimum_size = Vector2(0, 96)
+	right_info_panel.add_child(trump_symbol_label)
 
 	hand_box = Control.new()
 	hand_box.custom_minimum_size = Vector2(0, 170)
@@ -415,7 +434,7 @@ func _render() -> void:
 		trick_box.visible = true
 		hand_box.visible = true
 		left_stats_label.visible = false
-		right_info_label.visible = false
+		right_info_panel.visible = false
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		table_label.text = view_state["message"]
@@ -427,7 +446,7 @@ func _render() -> void:
 		trick_box.visible = false
 		hand_box.visible = false
 		left_stats_label.visible = false
-		right_info_label.visible = false
+		right_info_panel.visible = false
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		_render_lobby()
@@ -436,23 +455,23 @@ func _render() -> void:
 		trick_box.visible = true
 		hand_box.visible = true
 		left_stats_label.visible = false
-		right_info_label.visible = false
+		right_info_panel.visible = false
 		_render_game_end()
 		return
 
 	trick_box.visible = true
 	hand_box.visible = true
 	left_stats_label.visible = true
-	right_info_label.visible = true
+	right_info_panel.visible = true
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
-	right_info_label.text = "Round %d / %d\nCards: %d\nTrump: %s\n\nYou are seat %d\n%s" % [
+	right_info_label.text = "Round %d / %d\nCards: %d\n\nTrump\n\nYou are seat %d\n%s" % [
 		view_state["round_index"] + 1,
 		view_state["sequence"].size(),
 		round_size,
-		GameRules.SUIT_NAMES.get(view_state["trump"], view_state["trump"]),
 		my_seat + 1,
 		view_state["names"][my_seat],
 	]
+	_render_trump_symbol()
 	var stats_text := "Scores\n\n"
 	for i in range(view_state["num_players"]):
 		var bid_text := "?"
@@ -490,6 +509,12 @@ func _render_game_end() -> void:
 	_render_trick()
 	_render_actions()
 	_render_hand()
+
+func _render_trump_symbol() -> void:
+	var trump := str(view_state.get("trump", ""))
+	trump_symbol_label.text = SUIT_SYMBOLS.get(trump, trump)
+	trump_symbol_label.add_theme_color_override("font_color", SUIT_COLORS.get(trump, Color("#f7f1e3")))
+	trump_symbol_label.tooltip_text = GameRules.SUIT_NAMES.get(trump, trump)
 
 func _discovery_info() -> Dictionary:
 	var connected_count := _connected_count()
