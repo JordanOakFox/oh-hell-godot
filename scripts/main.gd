@@ -572,6 +572,12 @@ func _render_actions() -> void:
 		waiting.add_theme_color_override("font_color", Color("#f7f1e3"))
 		action_box.add_child(waiting)
 
+	if _can_host_stop_game():
+		var stop_button := Button.new()
+		stop_button.text = "Stop Game"
+		stop_button.pressed.connect(_host_stop_game)
+		action_box.add_child(stop_button)
+
 func _render_hand() -> void:
 	var hand_signature := _hand_signature(local_hand)
 	var phase := str(view_state.get("phase", ""))
@@ -1092,6 +1098,18 @@ func _host_start_game() -> void:
 	Net.stop_discovery()
 	_start_match(state["names"].duplicate(true), state["max_cards"])
 
+func _can_host_stop_game() -> bool:
+	if not multiplayer.multiplayer_peer or not multiplayer.is_server():
+		return false
+	return view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
+
+func _host_stop_game() -> void:
+	if not multiplayer.is_server():
+		return
+	if not (state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]):
+		return
+	_return_to_lobby("Game stopped by host. Ready up to start again.")
+
 func _request_play_again() -> void:
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
 		_server_play_again.rpc_id(1)
@@ -1123,6 +1141,9 @@ func _all_play_again_votes_in() -> bool:
 	return true
 
 func _return_to_lobby_after_game() -> void:
+	_return_to_lobby("Back in lobby. Ready up for another game.")
+
+func _return_to_lobby(message: String) -> void:
 	lobby_player_count = state["num_players"]
 	lobby_max_cards = state["max_cards"]
 	var names: Array = state["names"].duplicate(true)
@@ -1152,7 +1173,7 @@ func _return_to_lobby_after_game() -> void:
 		"standings": [],
 		"winners": [],
 		"round_history": [],
-		"message": "Back in lobby. Ready up for another game.",
+		"message": message,
 	}
 	_publish_state()
 	if multiplayer.multiplayer_peer and multiplayer.is_server():

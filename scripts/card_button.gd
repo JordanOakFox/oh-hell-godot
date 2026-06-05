@@ -4,7 +4,7 @@ class_name CardButton
 const SUIT_COLORS := {
 	"S": Color("#171717"),
 	"H": Color("#c8322b"),
-	"D": Color("#d6a51f"),
+	"D": Color("#e86f22"),
 	"C": Color("#2367c7"),
 }
 const SUIT_SYMBOLS := {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
