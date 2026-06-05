@@ -26,11 +26,14 @@ var address_input: LineEdit
 var name_input: LineEdit
 var player_count_spin: SpinBox
 var max_cards_spin: SpinBox
+var discovered_game_picker: OptionButton
+var discovered_games: Array = []
 
 func _ready() -> void:
 	rng.randomize()
 	_build_ui()
 	Net.connection_changed.connect(_set_status)
+	Net.discovered_games_changed.connect(_on_discovered_games_changed)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -85,6 +88,16 @@ func _build_ui() -> void:
 	join_button.text = "Join"
 	join_button.pressed.connect(_on_join_pressed)
 	net_row.add_child(join_button)
+
+	discovered_game_picker = OptionButton.new()
+	discovered_game_picker.custom_minimum_size = Vector2(220, 0)
+	discovered_game_picker.add_item("Scanning for games...")
+	net_row.add_child(discovered_game_picker)
+
+	var join_found_button := Button.new()
+	join_found_button.text = "Join Found"
+	join_found_button.pressed.connect(_on_join_found_pressed)
+	net_row.add_child(join_found_button)
 
 	var settings_row := HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -157,6 +170,7 @@ func _on_host_pressed() -> void:
 	my_seat = 0
 	seat_peers = _new_seat_peers(lobby_player_count)
 	_create_lobby("Hosting. Waiting for players...")
+	Net.start_advertising(_discovery_info())
 
 func _on_join_pressed() -> void:
 	_read_lobby_inputs()
@@ -167,6 +181,7 @@ func _on_join_pressed() -> void:
 	if err != OK:
 		_set_status("Join failed: %s" % error_string(err))
 	else:
+		Net.stop_discovery()
 		_create_client_waiting_view()
 
 func _apply_command_line_mode() -> void:
@@ -180,6 +195,7 @@ func _create_offline_lobby() -> void:
 	my_seat = 0
 	seat_peers = _new_seat_peers(lobby_player_count)
 	_create_lobby("Offline preview. Host a game or join a host.")
+	Net.start_discovery()
 
 func _create_client_waiting_view() -> void:
 	view_state = {
@@ -231,6 +247,8 @@ func _create_lobby(message: String) -> void:
 		"message": message,
 	}
 	_publish_state()
+	if multiplayer.multiplayer_peer and multiplayer.is_server():
+		Net.update_advertisement(_discovery_info())
 
 func _start_match(names: Array, max_cards: int) -> void:
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
@@ -363,6 +381,18 @@ func _render() -> void:
 	_render_trick()
 	_render_actions()
 	_render_hand()
+
+func _discovery_info() -> Dictionary:
+	var connected_count := _connected_count()
+	if state.is_empty() or state.get("phase", "") != "lobby":
+		connected_count = 0
+	return {
+		"name": "%s's table" % local_player_name,
+		"players": connected_count,
+		"max_players": lobby_player_count,
+		"max_cards": lobby_max_cards,
+		"phase": state.get("phase", "lobby"),
+	}
 
 func _render_lobby() -> void:
 	var text := "Multiplayer Lobby\n\n"
@@ -526,6 +556,35 @@ func _on_max_cards_changed(value: float) -> void:
 	lobby_max_cards = int(value)
 	if not multiplayer.multiplayer_peer:
 		_create_offline_lobby()
+
+func _on_discovered_games_changed(games: Array) -> void:
+	discovered_games = games
+	discovered_game_picker.clear()
+	if discovered_games.is_empty():
+		discovered_game_picker.add_item("No games found")
+		return
+	for i in range(discovered_games.size()):
+		var game: Dictionary = discovered_games[i]
+		var label := "%s  %s  %d/%d" % [
+			game.get("name", "Oh Hell table"),
+			game.get("address", ""),
+			int(game.get("players", 0)),
+			int(game.get("max_players", 0)),
+		]
+		discovered_game_picker.add_item(label)
+		discovered_game_picker.set_item_metadata(i, game)
+
+func _on_join_found_pressed() -> void:
+	if discovered_games.is_empty():
+		_set_status("No LAN games found yet.")
+		return
+	var index := discovered_game_picker.selected
+	if index < 0 or index >= discovered_games.size():
+		_set_status("Choose a discovered game first.")
+		return
+	var game: Dictionary = discovered_games[index]
+	address_input.text = str(game.get("address", ""))
+	_on_join_pressed()
 
 func _on_bid_button_pressed(button: Button) -> void:
 	_submit_bid(int(button.get_meta("bid")))
@@ -729,6 +788,7 @@ func _host_start_game() -> void:
 		state["message"] = "Everyone must be connected and ready before starting."
 		_publish_state()
 		return
+	Net.stop_discovery()
 	_start_match(state["names"].duplicate(true), state["max_cards"])
 
 func _on_peer_connected(peer_id: int) -> void:
@@ -742,6 +802,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	state["ready"] = _lobby_ready_seats()
 	state["message"] = "Seat %d joined." % [seat + 1]
 	_publish_state()
+	Net.update_advertisement(_discovery_info())
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	if not multiplayer.is_server():
@@ -754,6 +815,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	state["ready"] = _lobby_ready_seats()
 	state["message"] = "Seat %d disconnected." % [seat + 1]
 	_publish_state()
+	Net.update_advertisement(_discovery_info())
 
 func _first_open_seat() -> int:
 	for seat in range(1, seat_peers.size()):
