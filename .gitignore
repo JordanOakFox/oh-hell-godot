@@ -1,0 +1,14 @@
+# Godot editor/import cache
+.godot/
+
+# Godot export/build output
+exports/
+builds/
+*.pck
+*.zip
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
