@@ -377,18 +377,26 @@ func _render() -> void:
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":
+		trick_box.visible = true
+		hand_box.visible = true
 		table_label.text = view_state["message"]
 		_render_trick()
 		_render_actions()
 		_render_hand()
 		return
 	if view_state["phase"] == "lobby":
+		trick_box.visible = false
+		hand_box.visible = false
 		_render_lobby()
 		return
 	if view_state["phase"] == "game_end":
+		trick_box.visible = true
+		hand_box.visible = true
 		_render_game_end()
 		return
 
+	trick_box.visible = true
+	hand_box.visible = true
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
 	var text := "Round %d / %d | Cards: %d | Trump: %s\n" % [
 		view_state["round_index"] + 1,
@@ -717,13 +725,51 @@ func _on_player_count_changed(value: float) -> void:
 	if max_cards_spin.value > allowed:
 		max_cards_spin.value = allowed
 	lobby_max_cards = int(max_cards_spin.value)
-	if not multiplayer.multiplayer_peer:
+	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
+		_resize_host_lobby(lobby_player_count, lobby_max_cards)
+	elif not multiplayer.multiplayer_peer:
 		_create_offline_lobby()
 
 func _on_max_cards_changed(value: float) -> void:
 	lobby_max_cards = int(value)
-	if not multiplayer.multiplayer_peer:
+	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
+		_resize_host_lobby(lobby_player_count, lobby_max_cards)
+	elif not multiplayer.multiplayer_peer:
 		_create_offline_lobby()
+
+func _resize_host_lobby(player_count: int, max_cards: int) -> void:
+	player_count = clampi(player_count, 2, 10)
+	max_cards = clampi(max_cards, 1, GameRules.max_allowed_cards(player_count))
+	lobby_player_count = player_count
+	lobby_max_cards = max_cards
+
+	var old_names: Array = state.get("names", []).duplicate(true)
+	var old_profiles: Array = state.get("profiles", []).duplicate(true)
+	var old_ready: Array = state.get("ready", []).duplicate(true)
+	var old_peers: Array = seat_peers.duplicate(true)
+	seat_peers = _new_seat_peers(player_count)
+
+	for seat in range(1, player_count):
+		if seat < old_peers.size():
+			seat_peers[seat] = old_peers[seat]
+
+	state["num_players"] = player_count
+	state["max_cards"] = max_cards
+	state["sequence"] = GameRules.down_up_sequence(max_cards)
+	state["names"] = _default_names(player_count)
+	state["profiles"] = _default_profiles(player_count)
+	state["ready"] = _filled_array(player_count, false)
+	for seat in range(player_count):
+		if seat < old_names.size():
+			state["names"][seat] = old_names[seat]
+		if seat < old_profiles.size():
+			state["profiles"][seat] = old_profiles[seat]
+		if seat < old_ready.size() and int(seat_peers[seat]) != 0:
+			state["ready"][seat] = old_ready[seat]
+	state["connected"] = _connected_seats()
+	state["message"] = "Table changed to %d players, %d max cards." % [player_count, max_cards]
+	_publish_state()
+	Net.update_advertisement(_discovery_info())
 
 func _on_discovered_games_changed(games: Array) -> void:
 	discovered_games = games
