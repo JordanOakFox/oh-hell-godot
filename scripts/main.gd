@@ -109,7 +109,7 @@ func _build_ui() -> void:
 	settings_row.add_child(players_label)
 
 	player_count_spin = SpinBox.new()
-	player_count_spin.min_value = 3
+	player_count_spin.min_value = 2
 	player_count_spin.max_value = 10
 	player_count_spin.step = 1
 	player_count_spin.value = lobby_player_count

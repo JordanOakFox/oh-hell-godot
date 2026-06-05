@@ -16,21 +16,20 @@ The current seat assignment is intentionally simple:
 
 - Host is seat 1.
 - Joined peers fill seats 2, 3, 4, and so on.
-- The sample starts a four-player table.
+- The lobby supports 2 to 10 players.
+- The host chooses player count and max cards before starting.
 
 ## Next things to build
 
-1. Add a lobby screen where players choose name, player count, and max cards.
-2. Lock game start until all seats are occupied.
-3. Add reconnect handling and explicit turn timers.
-4. Add validation tests for `game_rules.gd`.
-5. Add an online relay/lobby option for games outside local Wi-Fi.
+1. Add reconnect handling and explicit turn timers.
+2. Add validation tests for `game_rules.gd`.
+3. Add an online relay/lobby option for games outside local Wi-Fi.
 
 ## Running it
 
 Open `outputs/oh_hell_godot_starter` as a Godot 4 project and run `scenes/main.tscn`.
 
-For local multiplayer testing, run one instance as Host and a second instance as Join localhost.
+For local multiplayer testing, run one instance as Host and a second instance as Join localhost. Two-player games are supported, which makes quick testing much easier.
 
 For a full four-seat local test on Windows, run:
 
