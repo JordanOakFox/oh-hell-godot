@@ -25,8 +25,10 @@ var bot_action_key := ""
 
 var status_label: Label
 var table_label: Label
+var left_stats_label: Label
+var right_info_label: Label
 var trick_box: HBoxContainer
-var hand_box: HBoxContainer
+var hand_box: Control
 var action_box: HBoxContainer
 var address_input: LineEdit
 var name_input: LineEdit
@@ -150,28 +152,56 @@ func _build_ui() -> void:
 	status_label.add_theme_color_override("font_color", Color("#f7f1e3"))
 	root.add_child(status_label)
 
+	var play_row := HBoxContainer.new()
+	play_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	play_row.add_theme_constant_override("separation", 16)
+	root.add_child(play_row)
+
+	left_stats_label = Label.new()
+	left_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	left_stats_label.add_theme_font_size_override("font_size", 16)
+	left_stats_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	left_stats_label.custom_minimum_size = Vector2(240, 0)
+	left_stats_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	play_row.add_child(left_stats_label)
+
+	var center_column := VBoxContainer.new()
+	center_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center_column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center_column.add_theme_constant_override("separation", 10)
+	play_row.add_child(center_column)
+
 	table_label = Label.new()
 	table_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	table_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	table_label.add_theme_font_size_override("font_size", 18)
 	table_label.add_theme_color_override("font_color", Color("#f7f1e3"))
-	table_label.custom_minimum_size = Vector2(0, 148)
-	root.add_child(table_label)
+	table_label.custom_minimum_size = Vector2(0, 68)
+	center_column.add_child(table_label)
 
 	trick_box = HBoxContainer.new()
 	trick_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	trick_box.add_theme_constant_override("separation", 18)
 	trick_box.custom_minimum_size = Vector2(0, 124)
-	root.add_child(trick_box)
+	trick_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center_column.add_child(trick_box)
 
 	action_box = HBoxContainer.new()
 	action_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	action_box.add_theme_constant_override("separation", 8)
-	root.add_child(action_box)
+	center_column.add_child(action_box)
 
-	hand_box = HBoxContainer.new()
-	hand_box.alignment = BoxContainer.ALIGNMENT_CENTER
-	hand_box.add_theme_constant_override("separation", 10)
+	right_info_label = Label.new()
+	right_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right_info_label.add_theme_font_size_override("font_size", 16)
+	right_info_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	right_info_label.custom_minimum_size = Vector2(240, 0)
+	right_info_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	play_row.add_child(right_info_label)
+
+	hand_box = Control.new()
+	hand_box.custom_minimum_size = Vector2(0, 170)
+	hand_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.add_child(hand_box)
 
 func _on_host_pressed() -> void:
@@ -384,6 +414,10 @@ func _render() -> void:
 	if view_state["phase"] == "connecting":
 		trick_box.visible = true
 		hand_box.visible = true
+		left_stats_label.visible = false
+		right_info_label.visible = false
+		left_stats_label.text = ""
+		right_info_label.text = ""
 		table_label.text = view_state["message"]
 		_render_trick()
 		_render_actions()
@@ -392,38 +426,48 @@ func _render() -> void:
 	if view_state["phase"] == "lobby":
 		trick_box.visible = false
 		hand_box.visible = false
+		left_stats_label.visible = false
+		right_info_label.visible = false
+		left_stats_label.text = ""
+		right_info_label.text = ""
 		_render_lobby()
 		return
 	if view_state["phase"] == "game_end":
 		trick_box.visible = true
 		hand_box.visible = true
+		left_stats_label.visible = false
+		right_info_label.visible = false
 		_render_game_end()
 		return
 
 	trick_box.visible = true
 	hand_box.visible = true
+	left_stats_label.visible = true
+	right_info_label.visible = true
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
-	var text := "Round %d / %d | Cards: %d | Trump: %s\n" % [
+	right_info_label.text = "Round %d / %d\nCards: %d\nTrump: %s\n\nYou are seat %d\n%s" % [
 		view_state["round_index"] + 1,
 		view_state["sequence"].size(),
 		round_size,
 		GameRules.SUIT_NAMES.get(view_state["trump"], view_state["trump"]),
+		my_seat + 1,
+		view_state["names"][my_seat],
 	]
-	text += "You are seat %d: %s\n\n" % [my_seat + 1, view_state["names"][my_seat]]
+	var stats_text := "Scores\n\n"
 	for i in range(view_state["num_players"]):
 		var bid_text := "?"
 		if view_state["phase"] == "bidding":
 			bid_text = "in" if view_state["bid_submitted"][i] else "..."
 		elif view_state["bids"][i] != null:
 			bid_text = str(view_state["bids"][i])
-		text += "%s: %d points, bid %s, tricks %d\n" % [
+		stats_text += "%s\n%d pts | bid %s | tricks %d\n\n" % [
 			view_state["names"][i],
 			view_state["scores"][i],
 			bid_text,
 			view_state["tricks_won"][i],
 		]
-	text += "\n%s" % view_state["message"]
-	table_label.text = text
+	left_stats_label.text = stats_text.strip_edges()
+	table_label.text = view_state["message"]
 
 	_render_trick()
 	_render_actions()
@@ -440,6 +484,8 @@ func _render_game_end() -> void:
 	for row in view_state["standings"]:
 		text += "%d. %s - %d\n" % [int(row["place"]), row["name"], int(row["score"])]
 	text += "\n%s" % view_state["message"]
+	left_stats_label.text = ""
+	right_info_label.text = ""
 	table_label.text = text
 	_render_trick()
 	_render_actions()
@@ -458,6 +504,8 @@ func _discovery_info() -> Dictionary:
 	}
 
 func _render_lobby() -> void:
+	left_stats_label.text = ""
+	right_info_label.text = ""
 	var text := "Multiplayer Lobby\n\n"
 	text += "Table: %d players, %d max cards\n" % [view_state["num_players"], view_state["max_cards"]]
 	text += "You are seat %d: %s\n\n" % [my_seat + 1, view_state["names"][my_seat]]
@@ -593,20 +641,27 @@ func _render_hand() -> void:
 	for child in hand_box.get_children():
 		child.queue_free()
 
+	var count := local_hand.size()
+	var hand_width := maxf(hand_box.size.x, 720.0)
+	var center_x := hand_width * 0.5
+	var spread := 0.0
+	if count > 1:
+		spread = clampf((hand_width - 140.0) / float(count - 1), 48.0, 92.0)
+
 	for i in range(local_hand.size()):
 		var card: Dictionary = local_hand[i]
-		var slot := Control.new()
-		slot.custom_minimum_size = Vector2(84, 118)
-		hand_box.add_child(slot)
-
 		var button = CardButtonScript.new()
 		button.setup(card)
 		button.disabled = view_state["phase"] != "playing" or view_state["active_player"] != my_seat or not GameRules.is_legal_card(local_hand, view_state["led_suit"], card)
 		button.set_meta("card", card)
 		button.pressed.connect(_on_card_button_pressed.bind(button))
-		button.position = Vector2(5, 6)
+		var offset := float(i) - (float(count - 1) * 0.5)
+		var arc_y := 26.0 + absf(offset) * 7.0
+		button.position = Vector2(center_x - 37.0 + offset * spread, arc_y)
+		button.scale = Vector2(1.16, 1.16)
+		button.rotation_degrees = offset * 4.2
 		button.pivot_offset = Vector2(37, 53)
-		slot.add_child(button)
+		hand_box.add_child(button)
 		if should_deal_animate:
 			_animate_card_dealt(button, i)
 
@@ -662,6 +717,8 @@ func _animate_shuffle_stack(stack: Control) -> void:
 
 func _animate_card_dealt(button: Control, index: int) -> void:
 	var target_position := button.position
+	var target_scale := button.scale
+	var target_rotation := button.rotation_degrees
 	button.position = target_position + Vector2(0, -86)
 	button.scale = Vector2(0.72, 0.72)
 	button.rotation_degrees = rng.randf_range(-14.0, 14.0)
@@ -673,8 +730,8 @@ func _animate_card_dealt(button: Control, index: int) -> void:
 	tween.tween_interval(index * 0.055)
 	tween.tween_property(button, "modulate:a", 1.0, 0.12)
 	tween.parallel().tween_property(button, "position", target_position, 0.34)
-	tween.parallel().tween_property(button, "scale", Vector2.ONE, 0.34)
-	tween.parallel().tween_property(button, "rotation_degrees", 0.0, 0.34)
+	tween.parallel().tween_property(button, "scale", target_scale, 0.34)
+	tween.parallel().tween_property(button, "rotation_degrees", target_rotation, 0.34)
 
 func _hand_signature(hand: Array) -> String:
 	var parts: Array = []
