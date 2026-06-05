@@ -19,6 +19,8 @@ var local_player_name := "Player"
 var local_profile_id := ""
 var recorded_game_ids := {}
 var rng := RandomNumberGenerator.new()
+var last_hand_signature := ""
+var last_shuffle_round_key := ""
 
 var status_label: Label
 var table_label: Label
@@ -474,11 +476,14 @@ func _render_trick() -> void:
 		child.queue_free()
 
 	if view_state["trick"].is_empty():
-		var empty := Label.new()
-		empty.text = "Table is clear"
-		empty.add_theme_font_size_override("font_size", 22)
-		empty.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
-		trick_box.add_child(empty)
+		if view_state["phase"] == "bidding":
+			_render_shuffle_stack()
+		else:
+			var empty := Label.new()
+			empty.text = "Table is clear"
+			empty.add_theme_font_size_override("font_size", 22)
+			empty.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+			trick_box.add_child(empty)
 		return
 
 	for play in view_state["trick"]:
@@ -560,16 +565,101 @@ func _render_actions() -> void:
 		action_box.add_child(waiting)
 
 func _render_hand() -> void:
+	var hand_signature := _hand_signature(local_hand)
+	var phase := str(view_state.get("phase", ""))
+	var should_deal_animate := phase in ["bidding", "playing"] and not local_hand.is_empty() and hand_signature != last_hand_signature
+
 	for child in hand_box.get_children():
 		child.queue_free()
 
-	for card in local_hand:
+	for i in range(local_hand.size()):
+		var card: Dictionary = local_hand[i]
+		var slot := Control.new()
+		slot.custom_minimum_size = Vector2(84, 118)
+		hand_box.add_child(slot)
+
 		var button = CardButtonScript.new()
 		button.setup(card)
 		button.disabled = view_state["phase"] != "playing" or view_state["active_player"] != my_seat or not GameRules.is_legal_card(local_hand, view_state["led_suit"], card)
 		button.set_meta("card", card)
 		button.pressed.connect(_on_card_button_pressed.bind(button))
-		hand_box.add_child(button)
+		button.position = Vector2(5, 6)
+		button.pivot_offset = Vector2(37, 53)
+		slot.add_child(button)
+		if should_deal_animate:
+			_animate_card_dealt(button, i)
+
+	last_hand_signature = hand_signature
+
+func _render_shuffle_stack() -> void:
+	var stack := Control.new()
+	stack.custom_minimum_size = Vector2(132, 124)
+	trick_box.add_child(stack)
+
+	for i in range(3):
+		var back = CardButtonScript.new()
+		back.setup({}, true)
+		back.disabled = true
+		back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		back.position = Vector2(25 + i * 9, 8 + i * 3)
+		back.rotation_degrees = -8 + i * 6
+		back.pivot_offset = Vector2(37, 53)
+		stack.add_child(back)
+
+	var label := Label.new()
+	label.text = "Shuffling / dealing"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
+	label.position = Vector2(0, 102)
+	label.custom_minimum_size = Vector2(132, 20)
+	stack.add_child(label)
+
+	var round_key := "%s:%s:%s" % [str(view_state.get("round_index", -1)), str(view_state.get("sequence", [])), _hand_signature(local_hand)]
+	if round_key == last_shuffle_round_key:
+		return
+	last_shuffle_round_key = round_key
+	_animate_shuffle_stack(stack)
+
+func _animate_shuffle_stack(stack: Control) -> void:
+	for i in range(min(3, stack.get_child_count())):
+		var card := stack.get_child(i) as Control
+		if not card:
+			continue
+		var target_position := card.position
+		var target_rotation := card.rotation_degrees
+		card.position = target_position + Vector2(-28 + i * 18, -10)
+		card.rotation_degrees = target_rotation - 14 + i * 8
+		card.modulate.a = 0.0
+		var tween := create_tween()
+		tween.set_trans(Tween.TRANS_BACK)
+		tween.set_ease(Tween.EASE_OUT)
+		tween.tween_interval(i * 0.08)
+		tween.tween_property(card, "modulate:a", 1.0, 0.16)
+		tween.parallel().tween_property(card, "position", target_position, 0.32)
+		tween.parallel().tween_property(card, "rotation_degrees", target_rotation, 0.32)
+
+func _animate_card_dealt(button: Control, index: int) -> void:
+	var target_position := button.position
+	button.position = target_position + Vector2(0, -86)
+	button.scale = Vector2(0.72, 0.72)
+	button.rotation_degrees = rng.randf_range(-14.0, 14.0)
+	button.modulate.a = 0.0
+
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_BACK)
+	tween.set_ease(Tween.EASE_OUT)
+	tween.tween_interval(index * 0.055)
+	tween.tween_property(button, "modulate:a", 1.0, 0.12)
+	tween.parallel().tween_property(button, "position", target_position, 0.34)
+	tween.parallel().tween_property(button, "scale", Vector2.ONE, 0.34)
+	tween.parallel().tween_property(button, "rotation_degrees", 0.0, 0.34)
+
+func _hand_signature(hand: Array) -> String:
+	var parts: Array = []
+	for card in hand:
+		parts.append("%s%s" % [str(card.get("suit", "")), str(card.get("rank", ""))])
+	return "|".join(parts)
 
 func _view_connected_count() -> int:
 	if not view_state.has("connected"):
