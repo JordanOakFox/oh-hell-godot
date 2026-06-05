@@ -168,7 +168,7 @@ func _build_ui() -> void:
 
 	left_stats_label = Label.new()
 	left_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	left_stats_label.add_theme_font_size_override("font_size", 16)
+	left_stats_label.add_theme_font_size_override("font_size", 14)
 	left_stats_label.add_theme_color_override("font_color", Color("#f7f1e3"))
 	left_stats_label.custom_minimum_size = Vector2(240, 0)
 	left_stats_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -191,7 +191,7 @@ func _build_ui() -> void:
 	trick_box = HBoxContainer.new()
 	trick_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	trick_box.add_theme_constant_override("separation", 18)
-	trick_box.custom_minimum_size = Vector2(0, 124)
+	trick_box.custom_minimum_size = Vector2(0, 96)
 	trick_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	center_column.add_child(trick_box)
 
@@ -219,7 +219,7 @@ func _build_ui() -> void:
 	right_info_panel.add_child(trump_symbol_label)
 
 	hand_box = Control.new()
-	hand_box.custom_minimum_size = Vector2(0, 170)
+	hand_box.custom_minimum_size = Vector2(0, 178)
 	hand_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.add_child(hand_box)
 
@@ -472,14 +472,14 @@ func _render() -> void:
 		view_state["names"][my_seat],
 	]
 	_render_trump_symbol()
-	var stats_text := "Scores\n\n"
+	var stats_text := "Scores\n"
 	for i in range(view_state["num_players"]):
 		var bid_text := "?"
 		if view_state["phase"] == "bidding":
 			bid_text = "in" if view_state["bid_submitted"][i] else "..."
 		elif view_state["bids"][i] != null:
 			bid_text = str(view_state["bids"][i])
-		stats_text += "%s\n%d pts | bid %s | tricks %d\n\n" % [
+		stats_text += "%s: %d pts | bid %s | tricks %d\n" % [
 			view_state["names"][i],
 			view_state["scores"][i],
 			bid_text,
@@ -681,9 +681,9 @@ func _render_hand() -> void:
 		button.set_meta("card", card)
 		button.pressed.connect(_on_card_button_pressed.bind(button))
 		var offset := float(i) - (float(count - 1) * 0.5)
-		var arc_y := 26.0 + absf(offset) * 7.0
+		var arc_y := 14.0 + absf(offset) * 5.0
 		button.position = Vector2(center_x - 37.0 + offset * spread, arc_y)
-		button.scale = Vector2(1.16, 1.16)
+		button.scale = Vector2(1.12, 1.12)
 		button.rotation_degrees = offset * 4.2
 		button.pivot_offset = Vector2(37, 53)
 		hand_box.add_child(button)
