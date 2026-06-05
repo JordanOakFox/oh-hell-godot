@@ -199,6 +199,7 @@ func _create_client_waiting_view() -> void:
 		"leader": 0,
 		"active_player": -1,
 		"connected": _filled_array(lobby_player_count, false),
+		"ready": _filled_array(lobby_player_count, false),
 		"message": "Connecting to host...",
 	}
 	local_hand = []
@@ -226,6 +227,7 @@ func _create_lobby(message: String) -> void:
 		"leader": 0,
 		"active_player": -1,
 		"connected": _connected_seats(),
+		"ready": _lobby_ready_seats(),
 		"message": message,
 	}
 	_publish_state()
@@ -253,6 +255,7 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"leader": 0,
 		"active_player": -1,
 		"connected": _connected_seats(),
+		"ready": _lobby_ready_seats(),
 		"message": "",
 	}
 	state["scores"].resize(names.size())
@@ -373,7 +376,9 @@ func _render_lobby() -> void:
 			text += "Join address: %s\n" % ", ".join(addresses)
 		text += "\n"
 	for i in range(view_state["num_players"]):
-		var status := "connected" if view_state["connected"][i] else "waiting"
+		var status := "waiting"
+		if view_state["connected"][i]:
+			status = "ready" if view_state["ready"][i] else "not ready"
 		text += "Seat %d: %s - %s\n" % [i + 1, view_state["names"][i], status]
 	text += "\n%s" % view_state["message"]
 	table_label.text = text
@@ -413,8 +418,21 @@ func _render_actions() -> void:
 
 	if view_state["phase"] == "lobby":
 		var connected_count := _view_connected_count()
+		if view_state["connected"][my_seat]:
+			var ready_button := Button.new()
+			ready_button.text = "Unready" if view_state["ready"][my_seat] else "Ready"
+			ready_button.pressed.connect(_request_toggle_ready)
+			action_box.add_child(ready_button)
+
+		if multiplayer.multiplayer_peer and multiplayer.is_server():
+			var start_button := Button.new()
+			start_button.text = "Start Game"
+			start_button.disabled = not _view_lobby_can_start()
+			start_button.pressed.connect(_host_start_game)
+			action_box.add_child(start_button)
+
 		var waiting := Label.new()
-		waiting.text = "Waiting for players: %d / %d" % [connected_count, view_state["num_players"]]
+		waiting.text = "Players: %d / %d" % [connected_count, view_state["num_players"]]
 		waiting.add_theme_color_override("font_color", Color("#f7f1e3"))
 		action_box.add_child(waiting)
 	elif view_state["phase"] == "connecting":
@@ -467,6 +485,16 @@ func _view_connected_count() -> int:
 		if connected:
 			count += 1
 	return count
+
+func _view_lobby_can_start() -> bool:
+	if view_state.is_empty() or view_state["phase"] != "lobby":
+		return false
+	for i in range(view_state["num_players"]):
+		if not view_state["connected"][i]:
+			return false
+		if not view_state["ready"][i]:
+			return false
+	return true
 
 func _read_lobby_inputs() -> void:
 	local_player_name = name_input.text.strip_edges()
@@ -669,6 +697,40 @@ func _server_register_name(player_name: String) -> void:
 	state["message"] = "%s joined seat %d." % [state["names"][seat], seat + 1]
 	_publish_state()
 
+func _request_toggle_ready() -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_toggle_ready.rpc_id(1)
+	else:
+		_apply_toggle_ready(my_seat)
+
+@rpc("any_peer", "reliable")
+func _server_toggle_ready() -> void:
+	if not multiplayer.is_server():
+		return
+	_apply_toggle_ready(_seat_for_peer(multiplayer.get_remote_sender_id()))
+
+func _apply_toggle_ready(seat: int) -> void:
+	if state.get("phase", "") != "lobby":
+		return
+	if seat < 0 or seat >= state["num_players"]:
+		return
+	if not state["connected"][seat]:
+		return
+	state["ready"][seat] = not state["ready"][seat]
+	state["message"] = "%s is %s." % [state["names"][seat], "ready" if state["ready"][seat] else "not ready"]
+	_publish_state()
+
+func _host_start_game() -> void:
+	if not multiplayer.is_server():
+		return
+	if state.get("phase", "") != "lobby":
+		return
+	if not _lobby_can_start():
+		state["message"] = "Everyone must be connected and ready before starting."
+		_publish_state()
+		return
+	_start_match(state["names"].duplicate(true), state["max_cards"])
+
 func _on_peer_connected(peer_id: int) -> void:
 	if not multiplayer.is_server():
 		return
@@ -677,12 +739,9 @@ func _on_peer_connected(peer_id: int) -> void:
 		return
 	seat_peers[seat] = peer_id
 	state["connected"] = _connected_seats()
+	state["ready"] = _lobby_ready_seats()
 	state["message"] = "Seat %d joined." % [seat + 1]
 	_publish_state()
-	if _connected_count() == state["num_players"] and state["phase"] == "lobby":
-		await get_tree().create_timer(0.5).timeout
-		if state["phase"] == "lobby" and _connected_count() == state["num_players"]:
-			_start_match(state["names"].duplicate(true), state["max_cards"])
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	if not multiplayer.is_server():
@@ -692,6 +751,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		return
 	seat_peers[seat] = 0
 	state["connected"] = _connected_seats()
+	state["ready"] = _lobby_ready_seats()
 	state["message"] = "Seat %d disconnected." % [seat + 1]
 	_publish_state()
 
@@ -733,6 +793,26 @@ func _connected_seats() -> Array:
 	for peer_id in seat_peers:
 		connected.append(int(peer_id) != 0)
 	return connected
+
+func _lobby_ready_seats() -> Array:
+	var ready: Array = []
+	for seat in range(seat_peers.size()):
+		var is_connected := int(seat_peers[seat]) != 0
+		var existing_ready := false
+		if state.has("ready") and seat < state["ready"].size():
+			existing_ready = state["ready"][seat]
+		ready.append(is_connected and existing_ready)
+	return ready
+
+func _lobby_can_start() -> bool:
+	if state.get("phase", "") != "lobby":
+		return false
+	for seat in range(state["num_players"]):
+		if not state["connected"][seat]:
+			return false
+		if not state["ready"][seat]:
+			return false
+	return true
 
 func _connected_count() -> int:
 	var count := 0
