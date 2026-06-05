@@ -2,7 +2,7 @@ extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
 const DEFAULT_MAX_CARDS := 7
-const TARGET_PLAYERS := 4
+const DEFAULT_PLAYERS := 4
 
 const CardButtonScript := preload("res://scripts/card_button.gd")
 const FeltBackgroundScript := preload("res://scripts/felt_background.gd")
@@ -11,7 +11,10 @@ var state: Dictionary = {}
 var view_state: Dictionary = {}
 var local_hand: Array = []
 var my_seat := 0
-var seat_peers: Array = [1, 0, 0, 0]
+var seat_peers: Array = []
+var lobby_player_count := DEFAULT_PLAYERS
+var lobby_max_cards := DEFAULT_MAX_CARDS
+var local_player_name := "Player 1"
 var rng := RandomNumberGenerator.new()
 
 var status_label: Label
@@ -20,6 +23,9 @@ var trick_box: HBoxContainer
 var hand_box: HBoxContainer
 var action_box: HBoxContainer
 var address_input: LineEdit
+var name_input: LineEdit
+var player_count_spin: SpinBox
+var max_cards_spin: SpinBox
 
 func _ready() -> void:
 	rng.randomize()
@@ -27,6 +33,8 @@ func _ready() -> void:
 	Net.connection_changed.connect(_set_status)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.connected_to_server.connect(_on_connected_to_server)
+	multiplayer.connection_failed.connect(_on_connection_failed)
 	_create_offline_lobby()
 	_apply_command_line_mode()
 
@@ -55,6 +63,13 @@ func _build_ui() -> void:
 	net_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(net_row)
 
+	name_input = LineEdit.new()
+	name_input.text = local_player_name
+	name_input.placeholder_text = "Your name"
+	name_input.custom_minimum_size = Vector2(160, 0)
+	name_input.text_changed.connect(_on_name_changed)
+	net_row.add_child(name_input)
+
 	var host_button := Button.new()
 	host_button.text = "Host"
 	host_button.pressed.connect(_on_host_pressed)
@@ -70,6 +85,38 @@ func _build_ui() -> void:
 	join_button.text = "Join"
 	join_button.pressed.connect(_on_join_pressed)
 	net_row.add_child(join_button)
+
+	var settings_row := HBoxContainer.new()
+	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_child(settings_row)
+
+	var players_label := Label.new()
+	players_label.text = "Players"
+	players_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	settings_row.add_child(players_label)
+
+	player_count_spin = SpinBox.new()
+	player_count_spin.min_value = 3
+	player_count_spin.max_value = 10
+	player_count_spin.step = 1
+	player_count_spin.value = lobby_player_count
+	player_count_spin.custom_minimum_size = Vector2(72, 0)
+	player_count_spin.value_changed.connect(_on_player_count_changed)
+	settings_row.add_child(player_count_spin)
+
+	var cards_label := Label.new()
+	cards_label.text = "Max cards"
+	cards_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	settings_row.add_child(cards_label)
+
+	max_cards_spin = SpinBox.new()
+	max_cards_spin.min_value = 1
+	max_cards_spin.max_value = GameRules.max_allowed_cards(lobby_player_count)
+	max_cards_spin.step = 1
+	max_cards_spin.value = lobby_max_cards
+	max_cards_spin.custom_minimum_size = Vector2(72, 0)
+	max_cards_spin.value_changed.connect(_on_max_cards_changed)
+	settings_row.add_child(max_cards_spin)
 
 	status_label = Label.new()
 	status_label.text = "Offline local preview"
@@ -102,15 +149,17 @@ func _build_ui() -> void:
 	root.add_child(hand_box)
 
 func _on_host_pressed() -> void:
+	_read_lobby_inputs()
 	var err := Net.host()
 	if err != OK:
 		_set_status("Host failed: %s" % error_string(err))
 		return
 	my_seat = 0
-	seat_peers = [1, 0, 0, 0]
+	seat_peers = _new_seat_peers(lobby_player_count)
 	_create_lobby("Hosting. Waiting for players...")
 
 func _on_join_pressed() -> void:
+	_read_lobby_inputs()
 	var address := address_input.text.strip_edges()
 	if address.is_empty():
 		address = "127.0.0.1"
@@ -129,45 +178,48 @@ func _apply_command_line_mode() -> void:
 
 func _create_offline_lobby() -> void:
 	my_seat = 0
-	seat_peers = [1, 0, 0, 0]
+	seat_peers = _new_seat_peers(lobby_player_count)
 	_create_lobby("Offline preview. Host a game or join a host.")
 
 func _create_client_waiting_view() -> void:
 	view_state = {
 		"phase": "connecting",
-		"names": STARTING_NAMES,
-		"num_players": TARGET_PLAYERS,
+		"names": _default_names(lobby_player_count),
+		"num_players": lobby_player_count,
 		"sequence": [DEFAULT_MAX_CARDS],
 		"round_index": 0,
-		"dealer": TARGET_PLAYERS - 1,
-		"scores": [0, 0, 0, 0],
-		"bids": [null, null, null, null],
-		"bid_submitted": [false, false, false, false],
-		"tricks_won": [0, 0, 0, 0],
+		"dealer": lobby_player_count - 1,
+		"scores": _filled_array(lobby_player_count, 0),
+		"bids": _filled_array(lobby_player_count, null),
+		"bid_submitted": _filled_array(lobby_player_count, false),
+		"tricks_won": _filled_array(lobby_player_count, 0),
 		"trump": "",
 		"trick": [],
 		"led_suit": null,
 		"leader": 0,
 		"active_player": -1,
-		"connected": [false, false, false, false],
+		"connected": _filled_array(lobby_player_count, false),
 		"message": "Connecting to host...",
 	}
 	local_hand = []
 	_render()
 
 func _create_lobby(message: String) -> void:
+	var names := _default_names(lobby_player_count)
+	names[0] = local_player_name
 	state = {
 		"phase": "lobby",
-		"names": STARTING_NAMES,
-		"num_players": TARGET_PLAYERS,
-		"sequence": GameRules.down_up_sequence(DEFAULT_MAX_CARDS),
+		"names": names,
+		"num_players": lobby_player_count,
+		"max_cards": lobby_max_cards,
+		"sequence": GameRules.down_up_sequence(lobby_max_cards),
 		"round_index": 0,
-		"dealer": TARGET_PLAYERS - 1,
-		"scores": [0, 0, 0, 0],
-		"hands": [[], [], [], []],
-		"bids": [null, null, null, null],
-		"bid_submitted": [false, false, false, false],
-		"tricks_won": [0, 0, 0, 0],
+		"dealer": lobby_player_count - 1,
+		"scores": _filled_array(lobby_player_count, 0),
+		"hands": _empty_hands(lobby_player_count),
+		"bids": _filled_array(lobby_player_count, null),
+		"bid_submitted": _filled_array(lobby_player_count, false),
+		"tricks_won": _filled_array(lobby_player_count, 0),
 		"trump": "",
 		"trick": [],
 		"led_suit": null,
@@ -186,6 +238,7 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"phase": "bidding",
 		"names": names,
 		"num_players": names.size(),
+		"max_cards": max_cards,
 		"sequence": GameRules.down_up_sequence(max_cards),
 		"round_index": 0,
 		"dealer": names.size() - 1,
@@ -310,6 +363,7 @@ func _render() -> void:
 
 func _render_lobby() -> void:
 	var text := "Multiplayer Lobby\n\n"
+	text += "Table: %d players, %d max cards\n" % [view_state["num_players"], view_state["max_cards"]]
 	text += "You are seat %d: %s\n\n" % [my_seat + 1, view_state["names"][my_seat]]
 	for i in range(view_state["num_players"]):
 		var status := "connected" if view_state["connected"][i] else "waiting"
@@ -406,6 +460,37 @@ func _view_connected_count() -> int:
 		if connected:
 			count += 1
 	return count
+
+func _read_lobby_inputs() -> void:
+	local_player_name = name_input.text.strip_edges()
+	if local_player_name.is_empty():
+		local_player_name = "Player 1"
+	lobby_player_count = int(player_count_spin.value)
+	lobby_max_cards = int(max_cards_spin.value)
+	lobby_max_cards = clampi(lobby_max_cards, 1, GameRules.max_allowed_cards(lobby_player_count))
+
+func _on_name_changed(new_text: String) -> void:
+	local_player_name = new_text.strip_edges()
+	if local_player_name.is_empty():
+		local_player_name = "Player 1"
+	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
+		state["names"][0] = local_player_name
+		_publish_state()
+
+func _on_player_count_changed(value: float) -> void:
+	lobby_player_count = int(value)
+	var allowed := GameRules.max_allowed_cards(lobby_player_count)
+	max_cards_spin.max_value = allowed
+	if max_cards_spin.value > allowed:
+		max_cards_spin.value = allowed
+	lobby_max_cards = int(max_cards_spin.value)
+	if not multiplayer.multiplayer_peer:
+		_create_offline_lobby()
+
+func _on_max_cards_changed(value: float) -> void:
+	lobby_max_cards = int(value)
+	if not multiplayer.multiplayer_peer:
+		_create_offline_lobby()
 
 func _on_bid_button_pressed(button: Button) -> void:
 	_submit_bid(int(button.get_meta("bid")))
@@ -554,6 +639,29 @@ func _seat_for_peer(peer_id: int) -> int:
 		return 0
 	return seat_peers.find(peer_id)
 
+func _on_connected_to_server() -> void:
+	_server_register_name.rpc_id(1, local_player_name)
+
+func _on_connection_failed() -> void:
+	_create_client_waiting_view()
+	view_state["message"] = "Connection failed."
+	_render()
+
+@rpc("any_peer", "reliable")
+func _server_register_name(player_name: String) -> void:
+	if not multiplayer.is_server():
+		return
+	var peer_id := multiplayer.get_remote_sender_id()
+	var seat := _seat_for_peer(peer_id)
+	if seat < 0 or seat >= state["num_players"]:
+		return
+	var clean_name := player_name.strip_edges()
+	if clean_name.is_empty():
+		clean_name = "Player %d" % [seat + 1]
+	state["names"][seat] = clean_name.substr(0, 18)
+	state["message"] = "%s joined seat %d." % [state["names"][seat], seat + 1]
+	_publish_state()
+
 func _on_peer_connected(peer_id: int) -> void:
 	if not multiplayer.is_server():
 		return
@@ -567,7 +675,7 @@ func _on_peer_connected(peer_id: int) -> void:
 	if _connected_count() == state["num_players"] and state["phase"] == "lobby":
 		await get_tree().create_timer(0.5).timeout
 		if state["phase"] == "lobby" and _connected_count() == state["num_players"]:
-			_start_match(STARTING_NAMES, DEFAULT_MAX_CARDS)
+			_start_match(state["names"].duplicate(true), state["max_cards"])
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	if not multiplayer.is_server():
@@ -585,6 +693,33 @@ func _first_open_seat() -> int:
 		if int(seat_peers[seat]) == 0:
 			return seat
 	return -1
+
+func _new_seat_peers(count: int) -> Array:
+	var peers: Array = []
+	for seat in range(count):
+		peers.append(1 if seat == 0 else 0)
+	return peers
+
+func _default_names(count: int) -> Array:
+	var names: Array = []
+	for i in range(count):
+		if i < STARTING_NAMES.size():
+			names.append(STARTING_NAMES[i])
+		else:
+			names.append("Player %d" % [i + 1])
+	return names
+
+func _filled_array(count: int, value) -> Array:
+	var values: Array = []
+	for _i in range(count):
+		values.append(value)
+	return values
+
+func _empty_hands(count: int) -> Array:
+	var hands: Array = []
+	for _i in range(count):
+		hands.append([])
+	return hands
 
 func _connected_seats() -> Array:
 	var connected := []
