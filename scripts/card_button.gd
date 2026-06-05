@@ -1,7 +1,12 @@
 extends Button
 class_name CardButton
 
-const RED_SUITS := ["H", "D"]
+const SUIT_COLORS := {
+	"S": Color("#171717"),
+	"H": Color("#c8322b"),
+	"D": Color("#d6a51f"),
+	"C": Color("#2367c7"),
+}
 const SUIT_SYMBOLS := {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
 const RANK_NAMES := {11: "J", 12: "Q", 13: "K", 14: "A"}
 
@@ -23,15 +28,14 @@ func _draw() -> void:
 	draw_rect(card_rect.grow(2), Color(0, 0, 0, 0.22))
 
 	if face_down:
-		draw_rect(card_rect, Color("#243f75"))
+		draw_rect(card_rect, Color("#f9f4e8"))
 		draw_rect(card_rect.grow(-7), Color("#d9b44a"), false, 2.0)
 		for x in range(16, int(size.x) - 10, 14):
 			for y in range(18, int(size.y) - 10, 14):
-				draw_circle(Vector2(x, y), 2.2, Color(1, 1, 1, 0.18))
+				draw_circle(Vector2(x, y), 2.2, Color("#2367c7", 0.18))
 		return
 
-	var is_red: bool = RED_SUITS.has(str(card["suit"]))
-	var ink: Color = Color("#b6332a") if is_red else Color("#181818")
+	var ink: Color = SUIT_COLORS.get(str(card["suit"]), Color("#181818"))
 	var fill: Color = Color("#f9f4e8") if not disabled else Color("#bdb6aa")
 	draw_rect(card_rect, fill)
 	draw_rect(card_rect, Color("#252019"), false, 2.0)
