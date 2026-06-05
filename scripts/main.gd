@@ -36,6 +36,8 @@ var left_stats_label: Label
 var right_info_panel: VBoxContainer
 var right_info_label: Label
 var trump_symbol_label: Label
+var trump_name_label: Label
+var seat_info_label: Label
 var trick_box: HBoxContainer
 var hand_box: Control
 var action_box: HBoxContainer
@@ -215,8 +217,20 @@ func _build_ui() -> void:
 	trump_symbol_label = Label.new()
 	trump_symbol_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	trump_symbol_label.add_theme_font_size_override("font_size", 76)
-	trump_symbol_label.custom_minimum_size = Vector2(0, 96)
+	trump_symbol_label.custom_minimum_size = Vector2(0, 84)
 	right_info_panel.add_child(trump_symbol_label)
+
+	trump_name_label = Label.new()
+	trump_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trump_name_label.add_theme_font_size_override("font_size", 18)
+	trump_name_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	right_info_panel.add_child(trump_name_label)
+
+	seat_info_label = Label.new()
+	seat_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	seat_info_label.add_theme_font_size_override("font_size", 16)
+	seat_info_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	right_info_panel.add_child(seat_info_label)
 
 	hand_box = Control.new()
 	hand_box.custom_minimum_size = Vector2(0, 178)
@@ -464,10 +478,12 @@ func _render() -> void:
 	left_stats_label.visible = true
 	right_info_panel.visible = true
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
-	right_info_label.text = "Round %d / %d\nCards: %d\n\nTrump\n\nYou are seat %d\n%s" % [
+	right_info_label.text = "Round %d / %d\nCards: %d\n\nTrump" % [
 		view_state["round_index"] + 1,
 		view_state["sequence"].size(),
 		round_size,
+	]
+	seat_info_label.text = "\nYou are seat %d\n%s" % [
 		my_seat + 1,
 		view_state["names"][my_seat],
 	]
@@ -514,7 +530,10 @@ func _render_trump_symbol() -> void:
 	var trump := str(view_state.get("trump", ""))
 	trump_symbol_label.text = SUIT_SYMBOLS.get(trump, trump)
 	trump_symbol_label.add_theme_color_override("font_color", SUIT_COLORS.get(trump, Color("#f7f1e3")))
-	trump_symbol_label.tooltip_text = GameRules.SUIT_NAMES.get(trump, trump)
+	var trump_name: String = GameRules.SUIT_NAMES.get(trump, trump)
+	trump_name_label.text = trump_name
+	trump_name_label.add_theme_color_override("font_color", SUIT_COLORS.get(trump, Color("#f7f1e3")))
+	trump_symbol_label.tooltip_text = trump_name
 
 func _discovery_info() -> Dictionary:
 	var connected_count := _connected_count()
