@@ -6,6 +6,7 @@ const DEFAULT_PLAYERS := 4
 
 const CardButtonScript := preload("res://scripts/card_button.gd")
 const FeltBackgroundScript := preload("res://scripts/felt_background.gd")
+const FireworksOverlayScript := preload("res://scripts/fireworks_overlay.gd")
 
 var state: Dictionary = {}
 var view_state: Dictionary = {}
@@ -28,6 +29,7 @@ var player_count_spin: SpinBox
 var max_cards_spin: SpinBox
 var discovered_game_picker: OptionButton
 var discovered_games: Array = []
+var fireworks_overlay: Control
 
 func _ready() -> void:
 	rng.randomize()
@@ -45,6 +47,10 @@ func _build_ui() -> void:
 	var background = FeltBackgroundScript.new()
 	background.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(background)
+
+	fireworks_overlay = FireworksOverlayScript.new()
+	fireworks_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(fireworks_overlay)
 
 	var root := VBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -216,6 +222,9 @@ func _create_client_waiting_view() -> void:
 		"active_player": -1,
 		"connected": _filled_array(lobby_player_count, false),
 		"ready": _filled_array(lobby_player_count, false),
+		"play_again": _filled_array(lobby_player_count, false),
+		"standings": [],
+		"winners": [],
 		"message": "Connecting to host...",
 	}
 	local_hand = []
@@ -244,6 +253,9 @@ func _create_lobby(message: String) -> void:
 		"active_player": -1,
 		"connected": _connected_seats(),
 		"ready": _lobby_ready_seats(),
+		"play_again": _filled_array(lobby_player_count, false),
+		"standings": [],
+		"winners": [],
 		"message": message,
 	}
 	_publish_state()
@@ -274,6 +286,9 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"active_player": -1,
 		"connected": _connected_seats(),
 		"ready": _lobby_ready_seats(),
+		"play_again": _filled_array(names.size(), false),
+		"standings": [],
+		"winners": [],
 		"message": "",
 	}
 	state["scores"].resize(names.size())
@@ -345,6 +360,8 @@ func _bidding_message() -> String:
 func _render() -> void:
 	if view_state.is_empty():
 		return
+	if fireworks_overlay:
+		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":
 		table_label.text = view_state["message"]
 		_render_trick()
@@ -353,6 +370,9 @@ func _render() -> void:
 		return
 	if view_state["phase"] == "lobby":
 		_render_lobby()
+		return
+	if view_state["phase"] == "game_end":
+		_render_game_end()
 		return
 
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
@@ -378,6 +398,22 @@ func _render() -> void:
 	text += "\n%s" % view_state["message"]
 	table_label.text = text
 
+	_render_trick()
+	_render_actions()
+	_render_hand()
+
+func _render_game_end() -> void:
+	var winner_text := "Game Over"
+	if view_state["winners"].size() == 1:
+		winner_text = "%s Wins!" % view_state["winners"][0]
+	elif view_state["winners"].size() > 1:
+		winner_text = "%s Tie!" % ", ".join(view_state["winners"])
+
+	var text := "%s\n\nFinal Standings\n" % winner_text
+	for row in view_state["standings"]:
+		text += "%d. %s - %d\n" % [int(row["place"]), row["name"], int(row["score"])]
+	text += "\n%s" % view_state["message"]
+	table_label.text = text
 	_render_trick()
 	_render_actions()
 	_render_hand()
@@ -494,6 +530,17 @@ func _render_actions() -> void:
 		next_round.text = "Next round"
 		next_round.pressed.connect(_request_next_round)
 		action_box.add_child(next_round)
+	elif view_state["phase"] == "game_end":
+		var play_again := Button.new()
+		play_again.text = "Waiting..." if view_state["play_again"][my_seat] else "Play Again"
+		play_again.disabled = view_state["play_again"][my_seat]
+		play_again.pressed.connect(_request_play_again)
+		action_box.add_child(play_again)
+
+		var waiting := Label.new()
+		waiting.text = "Play again: %d / %d" % [_play_again_count(), view_state["num_players"]]
+		waiting.add_theme_color_override("font_color", Color("#f7f1e3"))
+		action_box.add_child(waiting)
 
 func _render_hand() -> void:
 	for child in hand_box.get_children():
@@ -525,6 +572,15 @@ func _view_lobby_can_start() -> bool:
 		if not view_state["ready"][i]:
 			return false
 	return true
+
+func _play_again_count() -> int:
+	if not view_state.has("play_again"):
+		return 0
+	var count := 0
+	for voted in view_state["play_again"]:
+		if voted:
+			count += 1
+	return count
 
 func _read_lobby_inputs() -> void:
 	local_player_name = name_input.text.strip_edges()
@@ -717,11 +773,37 @@ func _next_round() -> void:
 	state["round_index"] += 1
 	state["dealer"] = (state["dealer"] + 1) % state["num_players"]
 	if state["round_index"] >= state["sequence"].size():
-		state["phase"] = "game_end"
-		state["message"] = "Game over."
-		_publish_state()
-	else:
-		_begin_round()
+		_end_game()
+		return
+	_begin_round()
+
+func _end_game() -> void:
+	var standings := _build_standings()
+	var winners: Array = []
+	var top_score := int(standings[0]["score"])
+	for row in standings:
+		if int(row["score"]) == top_score:
+			winners.append(row["name"])
+	state["phase"] = "game_end"
+	state["active_player"] = -1
+	state["trick"] = []
+	state["led_suit"] = null
+	state["play_again"] = _filled_array(state["num_players"], false)
+	state["standings"] = standings
+	state["winners"] = winners
+	state["message"] = "Everyone can vote to play again."
+	_publish_state()
+
+func _build_standings() -> Array:
+	var rows: Array = []
+	for i in range(state["num_players"]):
+		rows.append({"name": state["names"][i], "score": state["scores"][i]})
+	rows.sort_custom(func(a, b): return int(a["score"]) > int(b["score"]))
+	var place := 1
+	for row in rows:
+		row["place"] = place
+		place += 1
+	return rows
 
 func _peer_for_seat(seat: int) -> int:
 	if seat == 0:
@@ -791,6 +873,69 @@ func _host_start_game() -> void:
 	Net.stop_discovery()
 	_start_match(state["names"].duplicate(true), state["max_cards"])
 
+func _request_play_again() -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_play_again.rpc_id(1)
+	else:
+		_apply_play_again(my_seat)
+
+@rpc("any_peer", "reliable")
+func _server_play_again() -> void:
+	if not multiplayer.is_server():
+		return
+	_apply_play_again(_seat_for_peer(multiplayer.get_remote_sender_id()))
+
+func _apply_play_again(seat: int) -> void:
+	if state.get("phase", "") != "game_end":
+		return
+	if seat < 0 or seat >= state["num_players"]:
+		return
+	state["play_again"][seat] = true
+	if _all_play_again_votes_in():
+		_return_to_lobby_after_game()
+	else:
+		state["message"] = "Waiting for everyone to choose Play Again."
+		_publish_state()
+
+func _all_play_again_votes_in() -> bool:
+	for seat in range(state["num_players"]):
+		if state["connected"][seat] and not state["play_again"][seat]:
+			return false
+	return true
+
+func _return_to_lobby_after_game() -> void:
+	lobby_player_count = state["num_players"]
+	lobby_max_cards = state["max_cards"]
+	var names: Array = state["names"].duplicate(true)
+	state = {
+		"phase": "lobby",
+		"names": names,
+		"num_players": lobby_player_count,
+		"max_cards": lobby_max_cards,
+		"sequence": GameRules.down_up_sequence(lobby_max_cards),
+		"round_index": 0,
+		"dealer": lobby_player_count - 1,
+		"scores": _filled_array(lobby_player_count, 0),
+		"hands": _empty_hands(lobby_player_count),
+		"bids": _filled_array(lobby_player_count, null),
+		"bid_submitted": _filled_array(lobby_player_count, false),
+		"tricks_won": _filled_array(lobby_player_count, 0),
+		"trump": "",
+		"trick": [],
+		"led_suit": null,
+		"leader": 0,
+		"active_player": -1,
+		"connected": _connected_seats(),
+		"ready": _filled_array(lobby_player_count, false),
+		"play_again": _filled_array(lobby_player_count, false),
+		"standings": [],
+		"winners": [],
+		"message": "Back in lobby. Ready up for another game.",
+	}
+	_publish_state()
+	if multiplayer.multiplayer_peer and multiplayer.is_server():
+		Net.start_advertising(_discovery_info())
+
 func _on_peer_connected(peer_id: int) -> void:
 	if not multiplayer.is_server():
 		return
@@ -813,6 +958,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	seat_peers[seat] = 0
 	state["connected"] = _connected_seats()
 	state["ready"] = _lobby_ready_seats()
+	if state.has("play_again") and seat < state["play_again"].size():
+		state["play_again"][seat] = false
 	state["message"] = "Seat %d disconnected." % [seat + 1]
 	_publish_state()
 	Net.update_advertisement(_discovery_info())
