@@ -29,3 +29,15 @@ func stop() -> void:
 func is_host() -> bool:
 	return multiplayer.is_server()
 
+func local_join_addresses(port: int = DEFAULT_PORT) -> Array:
+	var addresses: Array = []
+	for address in IP.get_local_addresses():
+		var text := str(address)
+		if text == "127.0.0.1" or text == "::1":
+			continue
+		if text.find(":") != -1:
+			continue
+		if text.begins_with("169.254."):
+			continue
+		addresses.append("%s:%d" % [text, port])
+	return addresses

@@ -365,6 +365,13 @@ func _render_lobby() -> void:
 	var text := "Multiplayer Lobby\n\n"
 	text += "Table: %d players, %d max cards\n" % [view_state["num_players"], view_state["max_cards"]]
 	text += "You are seat %d: %s\n\n" % [my_seat + 1, view_state["names"][my_seat]]
+	if multiplayer.multiplayer_peer and multiplayer.is_server():
+		var addresses := Net.local_join_addresses()
+		if addresses.is_empty():
+			text += "Join address: local network IP not found\n"
+		else:
+			text += "Join address: %s\n" % ", ".join(addresses)
+		text += "\n"
 	for i in range(view_state["num_players"]):
 		var status := "connected" if view_state["connected"][i] else "waiting"
 		text += "Seat %d: %s - %s\n" % [i + 1, view_state["names"][i], status]
