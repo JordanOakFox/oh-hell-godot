@@ -15,7 +15,9 @@ var my_seat := 0
 var seat_peers: Array = []
 var lobby_player_count := DEFAULT_PLAYERS
 var lobby_max_cards := DEFAULT_MAX_CARDS
-var local_player_name := "Player 1"
+var local_player_name := "Player"
+var local_profile_id := ""
+var recorded_game_ids := {}
 var rng := RandomNumberGenerator.new()
 
 var status_label: Label
@@ -33,6 +35,8 @@ var fireworks_overlay: Control
 
 func _ready() -> void:
 	rng.randomize()
+	local_player_name = Profile.display_name()
+	local_profile_id = Profile.profile_id()
 	_build_ui()
 	Net.connection_changed.connect(_set_status)
 	Net.discovered_games_changed.connect(_on_discovered_games_changed)
@@ -138,7 +142,7 @@ func _build_ui() -> void:
 	settings_row.add_child(max_cards_spin)
 
 	status_label = Label.new()
-	status_label.text = "Offline local preview"
+	status_label.text = Profile.stats_line()
 	status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	status_label.add_theme_color_override("font_color", Color("#f7f1e3"))
 	root.add_child(status_label)
@@ -207,6 +211,7 @@ func _create_client_waiting_view() -> void:
 	view_state = {
 		"phase": "connecting",
 		"names": _default_names(lobby_player_count),
+		"profiles": _default_profiles(lobby_player_count),
 		"num_players": lobby_player_count,
 		"sequence": [DEFAULT_MAX_CARDS],
 		"round_index": 0,
@@ -225,6 +230,7 @@ func _create_client_waiting_view() -> void:
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
 		"winners": [],
+		"round_history": [],
 		"message": "Connecting to host...",
 	}
 	local_hand = []
@@ -232,10 +238,13 @@ func _create_client_waiting_view() -> void:
 
 func _create_lobby(message: String) -> void:
 	var names := _default_names(lobby_player_count)
+	var profiles := _default_profiles(lobby_player_count)
 	names[0] = local_player_name
+	profiles[0] = Profile.public_profile()
 	state = {
 		"phase": "lobby",
 		"names": names,
+		"profiles": profiles,
 		"num_players": lobby_player_count,
 		"max_cards": lobby_max_cards,
 		"sequence": GameRules.down_up_sequence(lobby_max_cards),
@@ -256,6 +265,7 @@ func _create_lobby(message: String) -> void:
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
 		"winners": [],
+		"round_history": [],
 		"message": message,
 	}
 	_publish_state()
@@ -269,6 +279,7 @@ func _start_match(names: Array, max_cards: int) -> void:
 	state = {
 		"phase": "bidding",
 		"names": names,
+		"profiles": state["profiles"].duplicate(true),
 		"num_players": names.size(),
 		"max_cards": max_cards,
 		"sequence": GameRules.down_up_sequence(max_cards),
@@ -289,6 +300,7 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"play_again": _filled_array(names.size(), false),
 		"standings": [],
 		"winners": [],
+		"round_history": [],
 		"message": "",
 	}
 	state["scores"].resize(names.size())
@@ -445,7 +457,12 @@ func _render_lobby() -> void:
 		var status := "waiting"
 		if view_state["connected"][i]:
 			status = "ready" if view_state["ready"][i] else "not ready"
-		text += "Seat %d: %s - %s\n" % [i + 1, view_state["names"][i], status]
+		var profile_text := ""
+		if view_state.has("profiles") and i < view_state["profiles"].size():
+			var profile: Dictionary = view_state["profiles"][i]
+			if int(profile.get("games_played", 0)) > 0:
+				profile_text = " (%dW/%dG)" % [int(profile.get("wins", 0)), int(profile.get("games_played", 0))]
+		text += "Seat %d: %s%s - %s\n" % [i + 1, view_state["names"][i], profile_text, status]
 	text += "\n%s" % view_state["message"]
 	table_label.text = text
 	_render_trick()
@@ -585,7 +602,9 @@ func _play_again_count() -> int:
 func _read_lobby_inputs() -> void:
 	local_player_name = name_input.text.strip_edges()
 	if local_player_name.is_empty():
-		local_player_name = "Player 1"
+		local_player_name = "Player"
+	Profile.set_display_name(local_player_name)
+	local_player_name = Profile.display_name()
 	lobby_player_count = int(player_count_spin.value)
 	lobby_max_cards = int(max_cards_spin.value)
 	lobby_max_cards = clampi(lobby_max_cards, 1, GameRules.max_allowed_cards(lobby_player_count))
@@ -593,9 +612,12 @@ func _read_lobby_inputs() -> void:
 func _on_name_changed(new_text: String) -> void:
 	local_player_name = new_text.strip_edges()
 	if local_player_name.is_empty():
-		local_player_name = "Player 1"
+		local_player_name = "Player"
+	Profile.set_display_name(local_player_name)
+	local_player_name = Profile.display_name()
 	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
 		state["names"][0] = local_player_name
+		state["profiles"][0] = Profile.public_profile()
 		_publish_state()
 
 func _on_player_count_changed(value: float) -> void:
@@ -748,6 +770,7 @@ func _continue_after_trick() -> void:
 	state["led_suit"] = null
 	state["leader"] = winner
 	if state["hands"][winner].is_empty():
+		_record_round_history()
 		var deltas := GameRules.score_deltas(state["bids"], state["tricks_won"])
 		for i in range(state["num_players"]):
 			state["scores"][i] += deltas[i]
@@ -777,6 +800,19 @@ func _next_round() -> void:
 		return
 	_begin_round()
 
+func _record_round_history() -> void:
+	if not state.has("round_history"):
+		state["round_history"] = []
+	var hit: Array = []
+	for i in range(state["num_players"]):
+		hit.append(int(state["bids"][i]) == int(state["tricks_won"][i]))
+	state["round_history"].append({
+		"round_index": state["round_index"],
+		"bids": state["bids"].duplicate(true),
+		"tricks_won": state["tricks_won"].duplicate(true),
+		"hit": hit,
+	})
+
 func _end_game() -> void:
 	var standings := _build_standings()
 	var winners: Array = []
@@ -784,6 +820,7 @@ func _end_game() -> void:
 	for row in standings:
 		if int(row["score"]) == top_score:
 			winners.append(row["name"])
+	var game_id := _make_game_id()
 	state["phase"] = "game_end"
 	state["active_player"] = -1
 	state["trick"] = []
@@ -791,8 +828,10 @@ func _end_game() -> void:
 	state["play_again"] = _filled_array(state["num_players"], false)
 	state["standings"] = standings
 	state["winners"] = winners
+	state["game_id"] = game_id
 	state["message"] = "Everyone can vote to play again."
 	_publish_state()
+	_publish_game_results(game_id, winners)
 
 func _build_standings() -> Array:
 	var rows: Array = []
@@ -805,6 +844,44 @@ func _build_standings() -> Array:
 		place += 1
 	return rows
 
+func _publish_game_results(game_id: String, winners: Array) -> void:
+	for seat in range(state["num_players"]):
+		if not state["connected"][seat]:
+			continue
+		var result := _game_result_for_seat(seat, game_id, winners)
+		var peer_id := _peer_for_seat(seat)
+		_receive_game_result.rpc_id(peer_id, result)
+
+func _game_result_for_seat(seat: int, game_id: String, winners: Array) -> Dictionary:
+	var bid_hits := 0
+	var bid_misses := 0
+	for round_summary in state.get("round_history", []):
+		if round_summary["hit"][seat]:
+			bid_hits += 1
+		else:
+			bid_misses += 1
+	return {
+		"game_id": game_id,
+		"score": int(state["scores"][seat]),
+		"won": winners.has(state["names"][seat]),
+		"bid_hits": bid_hits,
+		"bid_misses": bid_misses,
+	}
+
+@rpc("authority", "call_local", "reliable")
+func _receive_game_result(result: Dictionary) -> void:
+	var game_id := str(result.get("game_id", ""))
+	if recorded_game_ids.has(game_id):
+		return
+	recorded_game_ids[game_id] = true
+	Profile.record_game_result(
+		int(result.get("score", 0)),
+		bool(result.get("won", false)),
+		int(result.get("bid_hits", 0)),
+		int(result.get("bid_misses", 0))
+	)
+	_set_status(Profile.stats_line())
+
 func _peer_for_seat(seat: int) -> int:
 	if seat == 0:
 		return 1
@@ -816,7 +893,7 @@ func _seat_for_peer(peer_id: int) -> int:
 	return seat_peers.find(peer_id)
 
 func _on_connected_to_server() -> void:
-	_server_register_name.rpc_id(1, local_player_name)
+	_server_register_profile.rpc_id(1, Profile.public_profile())
 
 func _on_connection_failed() -> void:
 	_create_client_waiting_view()
@@ -824,17 +901,23 @@ func _on_connection_failed() -> void:
 	_render()
 
 @rpc("any_peer", "reliable")
-func _server_register_name(player_name: String) -> void:
+func _server_register_profile(profile: Dictionary) -> void:
 	if not multiplayer.is_server():
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	var seat := _seat_for_peer(peer_id)
 	if seat < 0 or seat >= state["num_players"]:
 		return
-	var clean_name := player_name.strip_edges()
+	var clean_name := str(profile.get("display_name", "")).strip_edges()
 	if clean_name.is_empty():
 		clean_name = "Player %d" % [seat + 1]
 	state["names"][seat] = clean_name.substr(0, 18)
+	state["profiles"][seat] = {
+		"id": str(profile.get("id", "")),
+		"display_name": state["names"][seat],
+		"games_played": int(profile.get("games_played", 0)),
+		"wins": int(profile.get("wins", 0)),
+	}
 	state["message"] = "%s joined seat %d." % [state["names"][seat], seat + 1]
 	_publish_state()
 
@@ -907,9 +990,11 @@ func _return_to_lobby_after_game() -> void:
 	lobby_player_count = state["num_players"]
 	lobby_max_cards = state["max_cards"]
 	var names: Array = state["names"].duplicate(true)
+	var profiles: Array = state["profiles"].duplicate(true)
 	state = {
 		"phase": "lobby",
 		"names": names,
+		"profiles": profiles,
 		"num_players": lobby_player_count,
 		"max_cards": lobby_max_cards,
 		"sequence": GameRules.down_up_sequence(lobby_max_cards),
@@ -930,6 +1015,7 @@ func _return_to_lobby_after_game() -> void:
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
 		"winners": [],
+		"round_history": [],
 		"message": "Back in lobby. Ready up for another game.",
 	}
 	_publish_state()
@@ -984,6 +1070,20 @@ func _default_names(count: int) -> Array:
 		else:
 			names.append("Player %d" % [i + 1])
 	return names
+
+func _default_profiles(count: int) -> Array:
+	var profiles: Array = []
+	for i in range(count):
+		profiles.append({
+			"id": "",
+			"display_name": "Player %d" % [i + 1],
+			"games_played": 0,
+			"wins": 0,
+		})
+	return profiles
+
+func _make_game_id() -> String:
+	return "%s-%d" % [Profile.profile_id(), Time.get_unix_time_from_system()]
 
 func _filled_array(count: int, value) -> Array:
 	var values: Array = []

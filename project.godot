@@ -22,6 +22,7 @@ config/features=PackedStringArray("4.6")
 
 GameRules="*res://scripts/game_rules.gd"
 Net="*res://scripts/net.gd"
+Profile="*res://scripts/profile.gd"
 
 [display]
 
