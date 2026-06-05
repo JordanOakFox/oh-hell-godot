@@ -21,6 +21,7 @@ var recorded_game_ids := {}
 var rng := RandomNumberGenerator.new()
 var last_hand_signature := ""
 var last_shuffle_round_key := ""
+var bot_action_key := ""
 
 var status_label: Label
 var table_label: Label
@@ -228,6 +229,7 @@ func _create_client_waiting_view() -> void:
 		"leader": 0,
 		"active_player": -1,
 		"connected": _filled_array(lobby_player_count, false),
+		"bots": _filled_array(lobby_player_count, false),
 		"ready": _filled_array(lobby_player_count, false),
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
@@ -263,6 +265,7 @@ func _create_lobby(message: String) -> void:
 		"leader": 0,
 		"active_player": -1,
 		"connected": _connected_seats(),
+		"bots": _filled_array(lobby_player_count, false),
 		"ready": _lobby_ready_seats(),
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
@@ -298,6 +301,7 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"leader": 0,
 		"active_player": -1,
 		"connected": _connected_seats(),
+		"bots": state.get("bots", _filled_array(names.size(), false)).duplicate(true),
 		"ready": _lobby_ready_seats(),
 		"play_again": _filled_array(names.size(), false),
 		"standings": [],
@@ -330,11 +334,12 @@ func _begin_round() -> void:
 	state["phase"] = "bidding"
 	state["message"] = "Choose your secret bid."
 	_publish_state()
+	_schedule_bot_action()
 
 func _publish_state() -> void:
 	if multiplayer.multiplayer_peer and multiplayer.is_server():
 		for seat in range(state["num_players"]):
-			if not state["connected"][seat]:
+			if not state["connected"][seat] or _is_bot_seat(seat):
 				continue
 			var peer_id := _peer_for_seat(seat)
 			_receive_private_state.rpc_id(peer_id, _public_state(), state["hands"][seat], seat)
@@ -465,7 +470,9 @@ func _render_lobby() -> void:
 		text += "\n"
 	for i in range(view_state["num_players"]):
 		var status := "waiting"
-		if view_state["connected"][i]:
+		if view_state.has("bots") and view_state["bots"][i]:
+			status = "bot"
+		elif view_state["connected"][i]:
 			status = "ready" if view_state["ready"][i] else "not ready"
 		var profile_text := ""
 		if view_state.has("profiles") and i < view_state["profiles"].size():
@@ -687,12 +694,17 @@ func _view_connected_count() -> int:
 func _view_lobby_can_start() -> bool:
 	if view_state.is_empty() or view_state["phase"] != "lobby":
 		return false
+	var human_count := 0
 	for i in range(view_state["num_players"]):
+		var is_bot := view_state.has("bots") and bool(view_state["bots"][i])
+		if is_bot:
+			continue
 		if not view_state["connected"][i]:
-			return false
+			continue
+		human_count += 1
 		if not view_state["ready"][i]:
 			return false
-	return true
+	return human_count > 0
 
 func _play_again_count() -> int:
 	if not view_state.has("play_again"):
@@ -752,6 +764,7 @@ func _resize_host_lobby(player_count: int, max_cards: int) -> void:
 	var old_names: Array = state.get("names", []).duplicate(true)
 	var old_profiles: Array = state.get("profiles", []).duplicate(true)
 	var old_ready: Array = state.get("ready", []).duplicate(true)
+	var old_bots: Array = state.get("bots", []).duplicate(true)
 	var old_peers: Array = seat_peers.duplicate(true)
 	seat_peers = _new_seat_peers(player_count)
 
@@ -764,12 +777,15 @@ func _resize_host_lobby(player_count: int, max_cards: int) -> void:
 	state["sequence"] = GameRules.down_up_sequence(max_cards)
 	state["names"] = _default_names(player_count)
 	state["profiles"] = _default_profiles(player_count)
+	state["bots"] = _filled_array(player_count, false)
 	state["ready"] = _filled_array(player_count, false)
 	for seat in range(player_count):
 		if seat < old_names.size():
 			state["names"][seat] = old_names[seat]
 		if seat < old_profiles.size():
 			state["profiles"][seat] = old_profiles[seat]
+		if seat < old_bots.size() and int(seat_peers[seat]) == 0:
+			state["bots"][seat] = old_bots[seat]
 		if seat < old_ready.size() and int(seat_peers[seat]) != 0:
 			state["ready"][seat] = old_ready[seat]
 	state["connected"] = _connected_seats()
@@ -841,6 +857,7 @@ func _apply_bid(seat: int, amount: int) -> void:
 	else:
 		state["message"] = _bidding_message()
 	_publish_state()
+	_schedule_bot_action()
 
 func _all_bids_in() -> bool:
 	for submitted in state["bid_submitted"]:
@@ -882,6 +899,7 @@ func _apply_card(seat: int, card: Dictionary) -> void:
 		state["active_player"] = (seat + 1) % state["num_players"]
 		state["message"] = "%s, play a card." % state["names"][state["active_player"]]
 	_publish_state()
+	_schedule_bot_action()
 
 func _schedule_auto_continue_after_trick(round_index: int, winner: int) -> void:
 	await get_tree().create_timer(2.0).timeout
@@ -923,6 +941,7 @@ func _continue_after_trick() -> void:
 		state["active_player"] = state["leader"]
 		state["message"] = "%s leads." % state["names"][state["leader"]]
 	_publish_state()
+	_schedule_bot_action()
 
 func _request_next_round() -> void:
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
@@ -941,6 +960,82 @@ func _next_round() -> void:
 		_end_game()
 		return
 	_begin_round()
+
+func _schedule_bot_action() -> void:
+	if not multiplayer.multiplayer_peer or not multiplayer.is_server():
+		return
+	if state.is_empty():
+		return
+	if state.get("phase", "") == "bidding":
+		for seat in range(state["num_players"]):
+			if _is_bot_seat(seat) and not state["bid_submitted"][seat]:
+				_queue_bot_bid(seat)
+				return
+	elif state.get("phase", "") == "playing":
+		var seat := int(state["active_player"])
+		if _is_bot_seat(seat):
+			_queue_bot_card(seat)
+
+func _queue_bot_bid(seat: int) -> void:
+	var key := "bid:%d:%d" % [int(state["round_index"]), seat]
+	if bot_action_key == key:
+		return
+	bot_action_key = key
+	await get_tree().create_timer(rng.randf_range(0.7, 1.25)).timeout
+	if bot_action_key != key or state.get("phase", "") != "bidding":
+		return
+	if not _is_bot_seat(seat) or state["bid_submitted"][seat]:
+		return
+	_apply_bid(seat, _bot_choose_bid(seat))
+
+func _queue_bot_card(seat: int) -> void:
+	var key := "card:%d:%d:%d" % [int(state["round_index"]), state["trick"].size(), seat]
+	if bot_action_key == key:
+		return
+	bot_action_key = key
+	await get_tree().create_timer(rng.randf_range(0.8, 1.45)).timeout
+	if bot_action_key != key or state.get("phase", "") != "playing":
+		return
+	if int(state["active_player"]) != seat or not _is_bot_seat(seat):
+		return
+	_apply_card(seat, _bot_choose_card(seat))
+
+func _bot_choose_bid(seat: int) -> int:
+	var hand: Array = state["hands"][seat]
+	var round_size: int = state["sequence"][state["round_index"]]
+	var likely_tricks := 0
+	for card in hand:
+		var rank := int(card["rank"])
+		if card["suit"] == state["trump"] and rank >= 10:
+			likely_tricks += 1
+		elif rank >= 13:
+			likely_tricks += 1
+		elif rank >= 11 and rng.randf() < 0.35:
+			likely_tricks += 1
+	if round_size > 1 and rng.randf() < 0.22:
+		likely_tricks += rng.randi_range(-1, 1)
+	return clampi(likely_tricks, 0, round_size)
+
+func _bot_choose_card(seat: int) -> Dictionary:
+	var legal: Array = GameRules.legal_cards(state["hands"][seat], state["led_suit"])
+	if legal.is_empty():
+		return state["hands"][seat][0]
+	var wants_tricks := int(state["tricks_won"][seat]) < int(state["bids"][seat])
+	legal.sort_custom(func(a, b):
+		var a_power := _bot_card_power(a)
+		var b_power := _bot_card_power(b)
+		return a_power > b_power if wants_tricks else a_power < b_power
+	)
+	var limit = mini(legal.size() - 1, 1)
+	return legal[rng.randi_range(0, limit)]
+
+func _bot_card_power(card: Dictionary) -> int:
+	var power := int(card["rank"])
+	if card["suit"] == state["trump"]:
+		power += 20
+	elif state["led_suit"] != null and card["suit"] == state["led_suit"]:
+		power += 8
+	return power
 
 func _record_round_history() -> void:
 	if not state.has("round_history"):
@@ -988,7 +1083,7 @@ func _build_standings() -> Array:
 
 func _publish_game_results(game_id: String, winners: Array) -> void:
 	for seat in range(state["num_players"]):
-		if not state["connected"][seat]:
+		if not state["connected"][seat] or _is_bot_seat(seat):
 			continue
 		var result := _game_result_for_seat(seat, game_id, winners)
 		var peer_id := _peer_for_seat(seat)
@@ -1092,11 +1187,31 @@ func _host_start_game() -> void:
 	if state.get("phase", "") != "lobby":
 		return
 	if not _lobby_can_start():
-		state["message"] = "Everyone must be connected and ready before starting."
+		state["message"] = "Connected players must be ready before starting."
 		_publish_state()
 		return
+	_fill_empty_seats_with_bots()
 	Net.stop_discovery()
 	_start_match(state["names"].duplicate(true), state["max_cards"])
+
+func _fill_empty_seats_with_bots() -> void:
+	var bots: Array = state.get("bots", _filled_array(state["num_players"], false))
+	bots.resize(state["num_players"])
+	for seat in range(state["num_players"]):
+		if int(seat_peers[seat]) == 0:
+			bots[seat] = true
+			state["names"][seat] = "Bot %d" % seat
+			state["profiles"][seat] = {
+				"id": "bot-%d" % seat,
+				"display_name": state["names"][seat],
+				"games_played": 0,
+				"wins": 0,
+			}
+		else:
+			bots[seat] = false
+	state["bots"] = bots
+	state["connected"] = _connected_seats()
+	state["ready"] = _lobby_ready_seats()
 
 func _can_host_stop_game() -> bool:
 	if not multiplayer.multiplayer_peer or not multiplayer.is_server():
@@ -1136,7 +1251,7 @@ func _apply_play_again(seat: int) -> void:
 
 func _all_play_again_votes_in() -> bool:
 	for seat in range(state["num_players"]):
-		if state["connected"][seat] and not state["play_again"][seat]:
+		if state["connected"][seat] and not _is_bot_seat(seat) and not state["play_again"][seat]:
 			return false
 	return true
 
@@ -1168,6 +1283,7 @@ func _return_to_lobby(message: String) -> void:
 		"leader": 0,
 		"active_player": -1,
 		"connected": _connected_seats(),
+		"bots": state.get("bots", _filled_array(lobby_player_count, false)).duplicate(true),
 		"ready": _filled_array(lobby_player_count, false),
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
@@ -1186,6 +1302,8 @@ func _on_peer_connected(peer_id: int) -> void:
 	if seat == -1:
 		return
 	seat_peers[seat] = peer_id
+	if state.has("bots"):
+		state["bots"][seat] = false
 	state["connected"] = _connected_seats()
 	state["ready"] = _lobby_ready_seats()
 	state["message"] = "Seat %d joined." % [seat + 1]
@@ -1256,29 +1374,38 @@ func _empty_hands(count: int) -> Array:
 
 func _connected_seats() -> Array:
 	var connected := []
-	for peer_id in seat_peers:
-		connected.append(int(peer_id) != 0)
+	for seat in range(seat_peers.size()):
+		connected.append(int(seat_peers[seat]) != 0 or _is_bot_seat(seat))
 	return connected
 
 func _lobby_ready_seats() -> Array:
 	var ready: Array = []
 	for seat in range(seat_peers.size()):
-		var is_connected := int(seat_peers[seat]) != 0
+		var is_connected := int(seat_peers[seat]) != 0 or _is_bot_seat(seat)
 		var existing_ready := false
+		if _is_bot_seat(seat):
+			existing_ready = true
 		if state.has("ready") and seat < state["ready"].size():
-			existing_ready = state["ready"][seat]
+			existing_ready = existing_ready or state["ready"][seat]
 		ready.append(is_connected and existing_ready)
 	return ready
 
 func _lobby_can_start() -> bool:
 	if state.get("phase", "") != "lobby":
 		return false
+	var human_count := 0
 	for seat in range(state["num_players"]):
-		if not state["connected"][seat]:
-			return false
+		if int(seat_peers[seat]) == 0:
+			continue
+		human_count += 1
 		if not state["ready"][seat]:
 			return false
-	return true
+	return human_count > 0
+
+func _is_bot_seat(seat: int) -> bool:
+	if state.has("bots") and seat >= 0 and seat < state["bots"].size():
+		return bool(state["bots"][seat])
+	return false
 
 func _connected_count() -> int:
 	var count := 0
