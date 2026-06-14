@@ -21,6 +21,7 @@ const SUIT_COLORS := {
 }
 
 var viewport: SubViewport
+var camera: Camera3D
 var world_root: Node3D
 var ocean_root: Node3D
 var ship_root: Node3D
@@ -35,6 +36,11 @@ var wave_strips: Array = []
 var flag_strips: Array = []
 var seat_count := 0
 var current_active := -1
+var local_seat := 0
+var camera_mode := "overview"
+var look_enabled := false
+var look_yaw := 0.0
+var look_pitch := -10.0
 var time := 0.0
 
 func _ready() -> void:
@@ -51,6 +57,10 @@ func _ready() -> void:
 	viewport.add_child(world_root)
 	_build_world()
 
+func _exit_tree() -> void:
+	if look_enabled:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
 func _process(delta: float) -> void:
 	time += delta
 	if ship_root:
@@ -60,6 +70,15 @@ func _process(delta: float) -> void:
 	_animate_waves()
 	_animate_flag()
 	_animate_seats()
+	_update_camera()
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
+		look_enabled = not look_enabled
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if look_enabled else Input.MOUSE_MODE_VISIBLE
+	elif event is InputEventMouseMotion and look_enabled:
+		look_yaw -= event.relative.x * 0.08
+		look_pitch = clampf(look_pitch - event.relative.y * 0.08, -35.0, 35.0)
 
 func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	if not is_inside_tree() or table_state.is_empty():
@@ -69,11 +88,17 @@ func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 		return
 	if players != seat_count:
 		_rebuild_seats(players)
+	local_seat = clampi(my_seat, 0, max(players - 1, 0))
+	var phase := str(table_state.get("phase", ""))
+	camera_mode = "seat" if phase in ["bidding", "playing", "trick_end", "round_end"] else "overview"
+	if camera_mode != "seat" and look_enabled:
+		look_enabled = false
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_seats(table_state, my_seat)
 	_update_trick(table_state)
 
 func _build_world() -> void:
-	var camera := Camera3D.new()
+	camera = Camera3D.new()
 	camera.position = Vector3(0, 5.9, 6.4)
 	camera.rotation_degrees = Vector3(-50, 0, 0)
 	camera.fov = 44
@@ -374,6 +399,33 @@ func _animate_seats() -> void:
 		avatar.position = base + Vector3(0, bounce, 0)
 		avatar.rotation.y = seat_base_rotations[seat]
 		avatar.rotation_degrees.x = lean
+
+func _update_camera() -> void:
+	if not camera:
+		return
+	if camera_mode != "seat" or local_seat >= seat_base_positions.size():
+		camera.position = camera.position.lerp(Vector3(0, 5.9, 6.4), 0.08)
+		camera.rotation_degrees = camera.rotation_degrees.lerp(Vector3(-50, 0, 0), 0.08)
+		camera.fov = lerpf(camera.fov, 44.0, 0.08)
+		return
+
+	var seat_pos: Vector3 = seat_base_positions[local_seat]
+	var seat_angle: float = atan2(seat_pos.z, seat_pos.x)
+	var inward := Vector3(-cos(seat_angle), 0, -sin(seat_angle)).normalized()
+	var side := Vector3(-inward.z, 0, inward.x)
+	var base_pos := ship_root.to_global(seat_pos + inward * 0.35 + Vector3(0, 1.24, 0))
+	var natural_yaw := rad_to_deg(atan2(-inward.x, -inward.z))
+	var yaw := natural_yaw + look_yaw
+	var pitch := look_pitch
+	if not look_enabled:
+		look_yaw = lerpf(look_yaw, 0.0, 0.08)
+		look_pitch = lerpf(look_pitch, -10.0, 0.08)
+		yaw = natural_yaw + look_yaw
+		pitch = look_pitch
+	var sway := side * sin(time * 1.8) * 0.025
+	camera.global_position = camera.global_position.lerp(base_pos + sway, 0.18)
+	camera.rotation_degrees = camera.rotation_degrees.lerp(Vector3(pitch, yaw, 0), 0.18)
+	camera.fov = lerpf(camera.fov, 64.0, 0.08)
 
 func _box(size: Vector3, color: Color) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
