@@ -137,8 +137,9 @@ func pick_hand_card(mouse_position: Vector2, display_size: Vector2) -> int:
 		if not card:
 			continue
 		var projected := camera.unproject_position(card.global_position)
-		var distance := projected.distance_to(local_mouse)
-		if distance < best_distance and distance < 34.0:
+		var normalized := Vector2((projected.x - local_mouse.x) / 39.0, (projected.y - local_mouse.y) / 58.0)
+		var distance := normalized.length()
+		if distance < best_distance and distance < 1.0:
 			best_distance = distance
 			best_index = i
 	return best_index
@@ -231,7 +232,7 @@ func _build_ship() -> void:
 	trick_root = Node3D.new()
 	ship_root.add_child(trick_root)
 	hand_root = Node3D.new()
-	ship_root.add_child(hand_root)
+	camera.add_child(hand_root)
 
 func _build_table() -> void:
 	var table := MeshInstance3D.new()
@@ -420,22 +421,14 @@ func _rebuild_player_hand(hand: Array) -> void:
 		return
 	for child in hand_root.get_children():
 		child.queue_free()
-	if hand.is_empty() or local_seat >= seat_base_positions.size():
+	if hand.is_empty():
 		return
-	var seat_pos: Vector3 = seat_base_positions[local_seat]
-	var seat_angle: float = atan2(seat_pos.z, seat_pos.x)
-	var inward := Vector3(-cos(seat_angle), 0, -sin(seat_angle)).normalized()
-	var side := Vector3(-inward.z, 0, inward.x)
-	var center := seat_pos + inward * 1.05 + Vector3(0, 0.92, 0)
-	var natural_yaw := rad_to_deg(atan2(-inward.x, -inward.z))
 	var count := hand.size()
 	for i in range(count):
-		var offset := float(i) - float(count - 1) * 0.5
 		var card: Dictionary = hand[i]
-		var card_node := _make_readable_card(card, 1.15)
+		var card_node := _make_readable_card(card, 1.62)
 		card_node.name = "HandCard%d" % i
-		card_node.position = center + side * offset * 0.22 + Vector3(0, -absf(offset) * 0.012, 0)
-		card_node.rotation_degrees = Vector3(-58.0, natural_yaw - offset * 3.0, -offset * 5.0)
+		_apply_hand_card_transform(card_node, i, count, false)
 		hand_root.add_child(card_node)
 
 func _animate_waves() -> void:
@@ -475,25 +468,32 @@ func _animate_seats() -> void:
 	_animate_player_hand()
 
 func _animate_player_hand() -> void:
-	if not hand_root or hand_root.get_child_count() == 0 or local_seat >= seat_base_positions.size():
+	if not hand_root or hand_root.get_child_count() == 0:
 		return
-	var seat_pos: Vector3 = seat_base_positions[local_seat]
-	var seat_angle: float = atan2(seat_pos.z, seat_pos.x)
-	var inward := Vector3(-cos(seat_angle), 0, -sin(seat_angle)).normalized()
-	var side := Vector3(-inward.z, 0, inward.x)
-	var center := seat_pos + inward * 1.05 + Vector3(0, 0.92, 0)
-	var natural_yaw := rad_to_deg(atan2(-inward.x, -inward.z))
 	var count := hand_root.get_child_count()
 	for i in range(count):
 		var card := hand_root.get_child(i) as Node3D
 		if not card:
 			continue
-		var offset := float(i) - float(count - 1) * 0.5
 		var is_hovered := i == hovered_hand_index
-		var lift := 0.12 if is_hovered else 0.0
-		card.position = center + side * offset * 0.22 + Vector3(0, lift + sin(time * 2.0 + float(i)) * 0.012 - absf(offset) * 0.012, 0)
-		card.rotation_degrees = Vector3(-58.0 + sin(time * 1.5 + float(i)) * 1.5, natural_yaw - offset * 3.0, -offset * 5.0)
+		_apply_hand_card_transform(card, i, count, is_hovered)
 		_set_card_hover_visual(card, is_hovered)
+
+func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: bool) -> void:
+	var offset := float(index) - float(count - 1) * 0.5
+	var spread := 0.205 if count <= 8 else 1.48 / float(max(count - 1, 1))
+	var lift := 0.13 if hovered else 0.0
+	var fan_turn := offset * 6.0
+	card.position = Vector3(
+		offset * spread,
+		-0.66 + lift - absf(offset) * 0.013 + sin(time * 2.0 + float(index)) * 0.004,
+		-1.14 - absf(offset) * 0.015
+	)
+	card.rotation_degrees = Vector3(
+		69.0 + absf(offset) * 1.2 + sin(time * 1.5 + float(index)) * 0.5,
+		-offset * 1.4,
+		-fan_turn
+	)
 
 func _update_camera() -> void:
 	if not camera:
@@ -534,19 +534,27 @@ func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 
 	var suit := str(card.get("suit", ""))
 	var rank := int(card.get("rank", 0))
+	var color: Color = SUIT_COLORS.get(suit, Color("#111111"))
+	var rank_text: String = str(RANK_NAMES.get(rank, str(rank)))
+	var suit_text: String = str(SUIT_SYMBOLS.get(suit, suit))
+	_add_card_label(root, "%s%s" % [rank_text, suit_text], Vector3(-0.088, 0.029, -0.165), 34, 0.0036, color, 0.0)
+	_add_card_label(root, suit_text, Vector3(0.0, 0.03, 0.01), 78, 0.0064, color, 0.0)
+	_add_card_label(root, "%s%s" % [rank_text, suit_text], Vector3(0.088, 0.029, 0.165), 34, 0.0036, color, 180.0)
+	return root
+
+func _add_card_label(root: Node3D, text: String, position: Vector3, font_size: int, pixel_size: float, color: Color, spin_degrees: float) -> void:
 	var label := Label3D.new()
-	label.text = "%s%s" % [RANK_NAMES.get(rank, str(rank)), SUIT_SYMBOLS.get(suit, suit)]
-	label.font_size = 42
-	label.pixel_size = 0.006
-	label.modulate = SUIT_COLORS.get(suit, Color("#111111"))
+	label.text = text
+	label.font_size = font_size
+	label.pixel_size = pixel_size
+	label.modulate = color
 	label.outline_size = 1
 	label.outline_modulate = Color("#f9f4e8")
 	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	label.no_depth_test = false
-	label.position = Vector3(0, 0.028, -0.03)
-	label.rotation_degrees = Vector3(-90, 0, 0)
+	label.position = position
+	label.rotation_degrees = Vector3(-90, 0, spin_degrees)
 	root.add_child(label)
-	return root
 
 func _set_card_hover_visual(card: Node3D, hovered: bool) -> void:
 	var face := card.get_node_or_null("Face") as MeshInstance3D
