@@ -426,7 +426,7 @@ func _rebuild_player_hand(hand: Array) -> void:
 	var count := hand.size()
 	for i in range(count):
 		var card: Dictionary = hand[i]
-		var card_node := _make_readable_card(card, 1.62)
+		var card_node := _make_readable_card(card, 1.18)
 		card_node.name = "HandCard%d" % i
 		_apply_hand_card_transform(card_node, i, count, false)
 		hand_root.add_child(card_node)
@@ -481,17 +481,17 @@ func _animate_player_hand() -> void:
 
 func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: bool) -> void:
 	var offset := float(index) - float(count - 1) * 0.5
-	var spread := 0.205 if count <= 8 else 1.48 / float(max(count - 1, 1))
-	var lift := 0.13 if hovered else 0.0
-	var fan_turn := offset * 6.0
+	var spread := 0.255 if count <= 8 else 1.82 / float(max(count - 1, 1))
+	var lift := 0.105 if hovered else 0.0
+	var fan_turn := offset * 5.4
 	card.position = Vector3(
 		offset * spread,
-		-0.66 + lift - absf(offset) * 0.013 + sin(time * 2.0 + float(index)) * 0.004,
-		-1.14 - absf(offset) * 0.015
+		-0.68 + lift - absf(offset) * 0.009 + sin(time * 2.0 + float(index)) * 0.003,
+		-1.22 - absf(offset) * 0.014
 	)
 	card.rotation_degrees = Vector3(
-		69.0 + absf(offset) * 1.2 + sin(time * 1.5 + float(index)) * 0.5,
-		-offset * 1.4,
+		69.0 + absf(offset) * 0.9 + sin(time * 1.5 + float(index)) * 0.35,
+		-offset * 1.0,
 		-fan_turn
 	)
 
@@ -537,9 +537,9 @@ func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	var color: Color = SUIT_COLORS.get(suit, Color("#111111"))
 	var rank_text: String = str(RANK_NAMES.get(rank, str(rank)))
 	var suit_text: String = str(SUIT_SYMBOLS.get(suit, suit))
-	_add_card_label(root, "%s%s" % [rank_text, suit_text], Vector3(-0.088, 0.029, -0.165), 34, 0.0036, color, 0.0)
-	_add_card_label(root, suit_text, Vector3(0.0, 0.03, 0.01), 78, 0.0064, color, 0.0)
-	_add_card_label(root, "%s%s" % [rank_text, suit_text], Vector3(0.088, 0.029, 0.165), 34, 0.0036, color, 180.0)
+	_add_card_label(root, "%s%s" % [rank_text, suit_text], Vector3(-0.095, 0.029, -0.17), 24, 0.0027, color, 0.0)
+	_add_card_label(root, suit_text, Vector3(0.0, 0.03, 0.012), 46, 0.0044, color, 0.0)
+	_add_card_label(root, "%s%s" % [rank_text, suit_text], Vector3(0.095, 0.029, 0.17), 24, 0.0027, color, 180.0)
 	return root
 
 func _add_card_label(root: Node3D, text: String, position: Vector3, font_size: int, pixel_size: float, color: Color, spin_degrees: float) -> void:
