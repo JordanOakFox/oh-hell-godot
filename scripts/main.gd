@@ -705,6 +705,7 @@ func _render_hand() -> void:
 		var button = CardButtonScript.new()
 		button.setup(card)
 		button.disabled = view_state["phase"] != "playing" or view_state["active_player"] != my_seat or not GameRules.is_legal_card(local_hand, view_state["led_suit"], card)
+		button.modulate.a = 0.0
 		button.set_meta("card", card)
 		button.pressed.connect(_on_card_button_pressed.bind(button))
 		var offset := float(i) - (float(count - 1) * 0.5)
@@ -714,7 +715,7 @@ func _render_hand() -> void:
 		button.rotation_degrees = offset * 4.2
 		button.pivot_offset = Vector2(37, 53)
 		hand_box.add_child(button)
-		if should_deal_animate:
+		if should_deal_animate and button.modulate.a > 0.0:
 			_animate_card_dealt(button, i)
 
 	last_hand_signature = hand_signature

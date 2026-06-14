@@ -86,8 +86,10 @@ func _input(event: InputEvent) -> void:
 		if skip_next_mouse_motion:
 			skip_next_mouse_motion = false
 			return
-		look_yaw = clampf(look_yaw - event.relative.x * 0.025, -70.0, 70.0)
-		look_pitch = clampf(look_pitch - event.relative.y * 0.025, -28.0, 28.0)
+		if event.relative.length() > 80.0:
+			return
+		look_yaw = clampf(look_yaw - event.relative.x * 0.008, -42.0, 42.0)
+		look_pitch = clampf(look_pitch - event.relative.y * 0.008, -22.0, 22.0)
 
 func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	if not is_inside_tree() or table_state.is_empty():
@@ -480,7 +482,10 @@ func _update_camera() -> void:
 		pitch = look_pitch
 	var sway := side * sin(time * 1.8) * 0.025
 	camera.global_position = camera.global_position.lerp(base_pos + sway, 0.18)
-	camera.rotation_degrees = camera.rotation_degrees.lerp(Vector3(pitch, yaw, 0), 0.18)
+	var yaw_radians := deg_to_rad(yaw)
+	var pitch_radians := deg_to_rad(pitch)
+	var forward := Vector3(-sin(yaw_radians) * cos(pitch_radians), sin(pitch_radians), -cos(yaw_radians) * cos(pitch_radians)).normalized()
+	camera.look_at(camera.global_position + forward, Vector3.UP)
 	camera.fov = lerpf(camera.fov, 64.0, 0.08)
 
 func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
@@ -493,11 +498,13 @@ func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	var rank := int(card.get("rank", 0))
 	var label := Label3D.new()
 	label.text = "%s%s" % [RANK_NAMES.get(rank, str(rank)), SUIT_SYMBOLS.get(suit, suit)]
-	label.font_size = 48
+	label.font_size = 56
 	label.modulate = SUIT_COLORS.get(suit, Color("#111111"))
-	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	label.position = Vector3(0, 0.022, -0.02)
-	label.rotation_degrees = Vector3(-90, 0, 0)
+	label.outline_size = 3
+	label.outline_modulate = Color("#f9f4e8")
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.position = Vector3(0, 0.12, 0)
 	root.add_child(label)
 	return root
 
