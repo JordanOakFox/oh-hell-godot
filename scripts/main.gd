@@ -449,6 +449,7 @@ func _render() -> void:
 		title_label.visible = view_state.get("phase", "") in ["connecting", "lobby", "game_end"]
 	if table_view_3d:
 		table_view_3d.set_table_state(view_state, my_seat)
+		table_view_3d.set_player_hand(local_hand)
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":

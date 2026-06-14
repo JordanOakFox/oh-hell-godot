@@ -19,6 +19,8 @@ const SUIT_COLORS := {
 	"D": Color("#e86f22"),
 	"C": Color("#2367c7"),
 }
+const SUIT_SYMBOLS := {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
+const RANK_NAMES := {11: "J", 12: "Q", 13: "K", 14: "A"}
 
 var viewport: SubViewport
 var camera: Camera3D
@@ -27,6 +29,7 @@ var ocean_root: Node3D
 var ship_root: Node3D
 var seat_root: Node3D
 var trick_root: Node3D
+var hand_root: Node3D
 var flag_root: Node3D
 var seats: Array = []
 var seat_base_positions: Array = []
@@ -39,8 +42,10 @@ var current_active := -1
 var local_seat := 0
 var camera_mode := "overview"
 var look_enabled := false
+var skip_next_mouse_motion := false
 var look_yaw := 0.0
 var look_pitch := -10.0
+var hand_signature := ""
 var time := 0.0
 
 func _ready() -> void:
@@ -75,10 +80,14 @@ func _process(delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
 		look_enabled = not look_enabled
+		skip_next_mouse_motion = look_enabled
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if look_enabled else Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseMotion and look_enabled:
-		look_yaw -= event.relative.x * 0.08
-		look_pitch = clampf(look_pitch - event.relative.y * 0.08, -35.0, 35.0)
+		if skip_next_mouse_motion:
+			skip_next_mouse_motion = false
+			return
+		look_yaw = clampf(look_yaw - event.relative.x * 0.025, -70.0, 70.0)
+		look_pitch = clampf(look_pitch - event.relative.y * 0.025, -28.0, 28.0)
 
 func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	if not is_inside_tree() or table_state.is_empty():
@@ -96,6 +105,13 @@ func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_seats(table_state, my_seat)
 	_update_trick(table_state)
+
+func set_player_hand(hand: Array) -> void:
+	var signature := _hand_signature(hand)
+	if signature == hand_signature:
+		return
+	hand_signature = signature
+	_rebuild_player_hand(hand)
 
 func _build_world() -> void:
 	camera = Camera3D.new()
@@ -184,6 +200,8 @@ func _build_ship() -> void:
 	ship_root.add_child(seat_root)
 	trick_root = Node3D.new()
 	ship_root.add_child(trick_root)
+	hand_root = Node3D.new()
+	ship_root.add_child(hand_root)
 
 func _build_table() -> void:
 	var table := MeshInstance3D.new()
@@ -355,15 +373,34 @@ func _update_trick(table_state: Dictionary) -> void:
 	for i in range(trick.size()):
 		var play: Dictionary = trick[i]
 		var card: Dictionary = play.get("card", {})
-		var suit := str(card.get("suit", ""))
-		var card_box := _box(Vector3(0.34, 0.025, 0.48), Color("#f9f4e8"))
+		var card_node := _make_readable_card(card, 1.0)
+		var card_box := card_node
 		card_box.position = Vector3(-0.5 + float(i) * 0.22, 0.62 + float(i) * 0.01, 0.02 + float(i) * 0.05)
 		card_box.rotation_degrees = Vector3(0, -18 + i * 9, 0)
-		trick_root.add_child(card_box)
-		var mark := _box(Vector3(0.16, 0.03, 0.16), SUIT_COLORS.get(suit, Color("#111111")))
-		mark.position = card_box.position + Vector3(0, 0.04, 0)
-		mark.rotation = card_box.rotation
-		trick_root.add_child(mark)
+		trick_root.add_child(card_node)
+
+func _rebuild_player_hand(hand: Array) -> void:
+	if not hand_root:
+		return
+	for child in hand_root.get_children():
+		child.queue_free()
+	if hand.is_empty() or local_seat >= seat_base_positions.size():
+		return
+	var seat_pos: Vector3 = seat_base_positions[local_seat]
+	var seat_angle: float = atan2(seat_pos.z, seat_pos.x)
+	var inward := Vector3(-cos(seat_angle), 0, -sin(seat_angle)).normalized()
+	var side := Vector3(-inward.z, 0, inward.x)
+	var center := seat_pos + inward * 1.05 + Vector3(0, 0.92, 0)
+	var natural_yaw := rad_to_deg(atan2(-inward.x, -inward.z))
+	var count := hand.size()
+	for i in range(count):
+		var offset := float(i) - float(count - 1) * 0.5
+		var card: Dictionary = hand[i]
+		var card_node := _make_readable_card(card, 1.15)
+		card_node.name = "HandCard%d" % i
+		card_node.position = center + side * offset * 0.22 + Vector3(0, -absf(offset) * 0.012, 0)
+		card_node.rotation_degrees = Vector3(-58.0, natural_yaw + offset * 4.0, offset * 2.5)
+		hand_root.add_child(card_node)
 
 func _animate_waves() -> void:
 	for i in range(wave_strips.size()):
@@ -399,6 +436,25 @@ func _animate_seats() -> void:
 		avatar.position = base + Vector3(0, bounce, 0)
 		avatar.rotation.y = seat_base_rotations[seat]
 		avatar.rotation_degrees.x = lean
+	_animate_player_hand()
+
+func _animate_player_hand() -> void:
+	if not hand_root or hand_root.get_child_count() == 0 or local_seat >= seat_base_positions.size():
+		return
+	var seat_pos: Vector3 = seat_base_positions[local_seat]
+	var seat_angle: float = atan2(seat_pos.z, seat_pos.x)
+	var inward := Vector3(-cos(seat_angle), 0, -sin(seat_angle)).normalized()
+	var side := Vector3(-inward.z, 0, inward.x)
+	var center := seat_pos + inward * 1.05 + Vector3(0, 0.92, 0)
+	var natural_yaw := rad_to_deg(atan2(-inward.x, -inward.z))
+	var count := hand_root.get_child_count()
+	for i in range(count):
+		var card := hand_root.get_child(i) as Node3D
+		if not card:
+			continue
+		var offset := float(i) - float(count - 1) * 0.5
+		card.position = center + side * offset * 0.22 + Vector3(0, sin(time * 2.0 + float(i)) * 0.012 - absf(offset) * 0.012, 0)
+		card.rotation_degrees = Vector3(-58.0 + sin(time * 1.5 + float(i)) * 1.5, natural_yaw + offset * 4.0, offset * 2.5)
 
 func _update_camera() -> void:
 	if not camera:
@@ -426,6 +482,30 @@ func _update_camera() -> void:
 	camera.global_position = camera.global_position.lerp(base_pos + sway, 0.18)
 	camera.rotation_degrees = camera.rotation_degrees.lerp(Vector3(pitch, yaw, 0), 0.18)
 	camera.fov = lerpf(camera.fov, 64.0, 0.08)
+
+func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
+	var root := Node3D.new()
+	root.scale = Vector3.ONE * scale_factor
+	var base := _box(Vector3(0.34, 0.025, 0.48), Color("#f9f4e8"))
+	root.add_child(base)
+
+	var suit := str(card.get("suit", ""))
+	var rank := int(card.get("rank", 0))
+	var label := Label3D.new()
+	label.text = "%s%s" % [RANK_NAMES.get(rank, str(rank)), SUIT_SYMBOLS.get(suit, suit)]
+	label.font_size = 48
+	label.modulate = SUIT_COLORS.get(suit, Color("#111111"))
+	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	label.position = Vector3(0, 0.022, -0.02)
+	label.rotation_degrees = Vector3(-90, 0, 0)
+	root.add_child(label)
+	return root
+
+func _hand_signature(hand: Array) -> String:
+	var parts: Array = []
+	for card in hand:
+		parts.append("%s%s" % [str(card.get("suit", "")), str(card.get("rank", ""))])
+	return "|".join(parts)
 
 func _box(size: Vector3, color: Color) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
