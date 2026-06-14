@@ -329,9 +329,13 @@ func _make_avatar(seat: int) -> Node3D:
 	var name_label := Label3D.new()
 	name_label.name = "Name"
 	name_label.text = "P%d" % (seat + 1)
-	name_label.font_size = 22
+	name_label.font_size = 34
+	name_label.modulate = Color("#f9f4e8")
+	name_label.outline_size = 6
+	name_label.outline_modulate = Color("#17110c")
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	name_label.position = Vector3(0, 1.34, 0)
+	name_label.no_depth_test = true
+	name_label.position = Vector3(0, 1.55, 0)
 	root.add_child(name_label)
 
 	var active_marker := _box(Vector3(0.82, 0.035, 0.82), Color("#f0d28a"))
@@ -355,7 +359,9 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 			var name := "Seat %d" % (seat + 1)
 			if seat < names.size():
 				name = str(names[seat])
-			label.text = "You" if seat == my_seat else name
+			var display_name := "You" if seat == my_seat else name
+			label.text = "%s ◄" % display_name if seat == current_active else display_name
+			label.modulate = Color("#f0d28a") if seat == current_active else Color("#f9f4e8")
 		var active := avatar.get_node_or_null("Active") as Node3D
 		if active:
 			active.visible = seat == current_active
