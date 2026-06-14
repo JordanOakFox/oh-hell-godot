@@ -31,6 +31,7 @@ var last_hand_signature := ""
 var last_shuffle_round_key := ""
 var bot_action_key := ""
 
+var title_label: Label
 var status_label: Label
 var table_label: Label
 var left_stats_label: Label
@@ -83,12 +84,12 @@ func _build_ui() -> void:
 	root.offset_bottom = -18
 	add_child(root)
 
-	var title := Label.new()
-	title.text = "Oh Hell"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 42)
-	title.add_theme_color_override("font_color", Color("#f0d28a"))
-	root.add_child(title)
+	title_label = Label.new()
+	title_label.text = "Oh Hell"
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_size_override("font_size", 42)
+	title_label.add_theme_color_override("font_color", Color("#f0d28a"))
+	root.add_child(title_label)
 
 	var net_row := HBoxContainer.new()
 	net_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -444,6 +445,8 @@ func _bidding_message() -> String:
 func _render() -> void:
 	if view_state.is_empty():
 		return
+	if title_label:
+		title_label.visible = view_state.get("phase", "") in ["connecting", "lobby", "game_end"]
 	if table_view_3d:
 		table_view_3d.set_table_state(view_state, my_seat)
 	if fireworks_overlay:
