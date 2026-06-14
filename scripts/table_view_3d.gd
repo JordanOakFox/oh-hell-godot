@@ -46,6 +46,7 @@ var skip_next_mouse_motion := false
 var look_yaw := 0.0
 var look_pitch := -10.0
 var hand_signature := ""
+var hovered_hand_index := -1
 var time := 0.0
 
 func _ready() -> void:
@@ -114,6 +115,33 @@ func set_player_hand(hand: Array) -> void:
 		return
 	hand_signature = signature
 	_rebuild_player_hand(hand)
+
+func set_hovered_hand_index(index: int) -> void:
+	hovered_hand_index = index
+
+func is_mouse_look_enabled() -> bool:
+	return look_enabled
+
+func pick_hand_card(mouse_position: Vector2, display_size: Vector2) -> int:
+	if not camera or not hand_root or hand_root.get_child_count() == 0 or display_size.x <= 0.0 or display_size.y <= 0.0:
+		return -1
+	var viewport_size := Vector2(viewport.size)
+	var local_mouse := Vector2(
+		mouse_position.x / display_size.x * viewport_size.x,
+		mouse_position.y / display_size.y * viewport_size.y
+	)
+	var best_index := -1
+	var best_distance := 999999.0
+	for i in range(hand_root.get_child_count()):
+		var card := hand_root.get_child(i) as Node3D
+		if not card:
+			continue
+		var projected := camera.unproject_position(card.global_position)
+		var distance := projected.distance_to(local_mouse)
+		if distance < best_distance and distance < 34.0:
+			best_distance = distance
+			best_index = i
+	return best_index
 
 func _build_world() -> void:
 	camera = Camera3D.new()
@@ -461,8 +489,11 @@ func _animate_player_hand() -> void:
 		if not card:
 			continue
 		var offset := float(i) - float(count - 1) * 0.5
-		card.position = center + side * offset * 0.22 + Vector3(0, sin(time * 2.0 + float(i)) * 0.012 - absf(offset) * 0.012, 0)
+		var is_hovered := i == hovered_hand_index
+		var lift := 0.12 if is_hovered else 0.0
+		card.position = center + side * offset * 0.22 + Vector3(0, lift + sin(time * 2.0 + float(i)) * 0.012 - absf(offset) * 0.012, 0)
 		card.rotation_degrees = Vector3(-58.0 + sin(time * 1.5 + float(i)) * 1.5, natural_yaw - offset * 3.0, -offset * 5.0)
+		_set_card_hover_visual(card, is_hovered)
 
 func _update_camera() -> void:
 	if not camera:
@@ -498,6 +529,7 @@ func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	var root := Node3D.new()
 	root.scale = Vector3.ONE * scale_factor
 	var base := _box(Vector3(0.34, 0.025, 0.48), Color("#f9f4e8"))
+	base.name = "Face"
 	root.add_child(base)
 
 	var suit := str(card.get("suit", ""))
@@ -515,6 +547,12 @@ func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	label.rotation_degrees = Vector3(-90, 0, 0)
 	root.add_child(label)
 	return root
+
+func _set_card_hover_visual(card: Node3D, hovered: bool) -> void:
+	var face := card.get_node_or_null("Face") as MeshInstance3D
+	if not face:
+		return
+	face.material_override = _mat(Color("#fff7c7") if hovered else Color("#f9f4e8"))
 
 func _hand_signature(hand: Array) -> String:
 	var parts: Array = []

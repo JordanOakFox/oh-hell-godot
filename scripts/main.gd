@@ -30,6 +30,7 @@ var rng := RandomNumberGenerator.new()
 var last_hand_signature := ""
 var last_shuffle_round_key := ""
 var bot_action_key := ""
+var hovered_3d_card_index := -1
 
 var title_label: Label
 var status_label: Label
@@ -65,6 +66,28 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	_create_offline_lobby()
 	_apply_command_line_mode()
+
+func _input(event: InputEvent) -> void:
+	if view_state.is_empty() or view_state.get("phase", "") != "playing":
+		_set_3d_card_hover(-1)
+		return
+	if int(view_state.get("active_player", -1)) != my_seat:
+		_set_3d_card_hover(-1)
+		return
+	if table_view_3d and table_view_3d.has_method("is_mouse_look_enabled") and table_view_3d.is_mouse_look_enabled():
+		_set_3d_card_hover(-1)
+		return
+	if (event is InputEventMouseMotion or event is InputEventMouseButton) and _mouse_over_command_ui(event.position):
+		_set_3d_card_hover(-1)
+		return
+
+	if event is InputEventMouseMotion:
+		_set_3d_card_hover(_legal_3d_card_index_at(event.position))
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var index := _legal_3d_card_index_at(event.position)
+		if index >= 0 and index < local_hand.size():
+			_set_3d_card_hover(-1)
+			_submit_card(local_hand[index])
 
 func _build_ui() -> void:
 	table_view_3d = TableView3DScript.new()
@@ -687,38 +710,36 @@ func _render_actions() -> void:
 
 func _render_hand() -> void:
 	var hand_signature := _hand_signature(local_hand)
-	var phase := str(view_state.get("phase", ""))
-	var should_deal_animate := phase in ["bidding", "playing"] and not local_hand.is_empty() and hand_signature != last_hand_signature
 
 	for child in hand_box.get_children():
 		child.queue_free()
 
-	var count := local_hand.size()
-	var hand_width := maxf(hand_box.size.x, 720.0)
-	var center_x := hand_width * 0.5
-	var spread := 0.0
-	if count > 1:
-		spread = clampf((hand_width - 140.0) / float(count - 1), 48.0, 92.0)
-
-	for i in range(local_hand.size()):
-		var card: Dictionary = local_hand[i]
-		var button = CardButtonScript.new()
-		button.setup(card)
-		button.disabled = view_state["phase"] != "playing" or view_state["active_player"] != my_seat or not GameRules.is_legal_card(local_hand, view_state["led_suit"], card)
-		button.modulate.a = 0.0
-		button.set_meta("card", card)
-		button.pressed.connect(_on_card_button_pressed.bind(button))
-		var offset := float(i) - (float(count - 1) * 0.5)
-		var arc_y := 14.0 + absf(offset) * 5.0
-		button.position = Vector2(center_x - 37.0 + offset * spread, arc_y)
-		button.scale = Vector2(1.12, 1.12)
-		button.rotation_degrees = offset * 4.2
-		button.pivot_offset = Vector2(37, 53)
-		hand_box.add_child(button)
-		if should_deal_animate and button.modulate.a > 0.0:
-			_animate_card_dealt(button, i)
-
 	last_hand_signature = hand_signature
+
+func _legal_3d_card_index_at(mouse_position: Vector2) -> int:
+	if not table_view_3d or not table_view_3d.has_method("pick_hand_card"):
+		return -1
+	var index: int = table_view_3d.pick_hand_card(mouse_position, get_viewport_rect().size)
+	if index < 0 or index >= local_hand.size():
+		return -1
+	if not GameRules.is_legal_card(local_hand, view_state["led_suit"], local_hand[index]):
+		return -1
+	return index
+
+func _set_3d_card_hover(index: int) -> void:
+	if hovered_3d_card_index == index:
+		return
+	hovered_3d_card_index = index
+	if table_view_3d and table_view_3d.has_method("set_hovered_hand_index"):
+		table_view_3d.set_hovered_hand_index(index)
+
+func _mouse_over_command_ui(position: Vector2) -> bool:
+	for control in [action_box, name_input, address_input, player_count_spin, max_cards_spin, discovered_game_picker]:
+		if control and control.visible:
+			var rect := Rect2(control.global_position, control.size)
+			if rect.has_point(position):
+				return true
+	return false
 
 func _render_shuffle_stack() -> void:
 	var stack := Control.new()
