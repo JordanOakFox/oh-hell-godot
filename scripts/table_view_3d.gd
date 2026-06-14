@@ -407,7 +407,7 @@ func _rebuild_player_hand(hand: Array) -> void:
 		var card_node := _make_readable_card(card, 1.15)
 		card_node.name = "HandCard%d" % i
 		card_node.position = center + side * offset * 0.22 + Vector3(0, -absf(offset) * 0.012, 0)
-		card_node.rotation_degrees = Vector3(-58.0, natural_yaw + offset * 4.0, offset * 2.5)
+		card_node.rotation_degrees = Vector3(-58.0, natural_yaw - offset * 3.0, -offset * 5.0)
 		hand_root.add_child(card_node)
 
 func _animate_waves() -> void:
@@ -462,7 +462,7 @@ func _animate_player_hand() -> void:
 			continue
 		var offset := float(i) - float(count - 1) * 0.5
 		card.position = center + side * offset * 0.22 + Vector3(0, sin(time * 2.0 + float(i)) * 0.012 - absf(offset) * 0.012, 0)
-		card.rotation_degrees = Vector3(-58.0 + sin(time * 1.5 + float(i)) * 1.5, natural_yaw + offset * 4.0, offset * 2.5)
+		card.rotation_degrees = Vector3(-58.0 + sin(time * 1.5 + float(i)) * 1.5, natural_yaw - offset * 3.0, -offset * 5.0)
 
 func _update_camera() -> void:
 	if not camera:
@@ -504,13 +504,15 @@ func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	var rank := int(card.get("rank", 0))
 	var label := Label3D.new()
 	label.text = "%s%s" % [RANK_NAMES.get(rank, str(rank)), SUIT_SYMBOLS.get(suit, suit)]
-	label.font_size = 56
+	label.font_size = 42
+	label.pixel_size = 0.006
 	label.modulate = SUIT_COLORS.get(suit, Color("#111111"))
-	label.outline_size = 3
+	label.outline_size = 1
 	label.outline_modulate = Color("#f9f4e8")
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.position = Vector3(0, 0.12, 0)
+	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	label.no_depth_test = false
+	label.position = Vector3(0, 0.028, -0.03)
+	label.rotation_degrees = Vector3(-90, 0, 0)
 	root.add_child(label)
 	return root
 
