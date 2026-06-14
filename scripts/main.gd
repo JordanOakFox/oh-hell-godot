@@ -7,6 +7,7 @@ const DEFAULT_PLAYERS := 4
 const CardButtonScript := preload("res://scripts/card_button.gd")
 const FeltBackgroundScript := preload("res://scripts/felt_background.gd")
 const FireworksOverlayScript := preload("res://scripts/fireworks_overlay.gd")
+const TableView3DScript := preload("res://scripts/table_view_3d.gd")
 const SUIT_SYMBOLS := {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
 const SUIT_COLORS := {
 	"S": Color("#171717"),
@@ -48,6 +49,7 @@ var max_cards_spin: SpinBox
 var discovered_game_picker: OptionButton
 var discovered_games: Array = []
 var fireworks_overlay: Control
+var table_view_3d: Control
 
 func _ready() -> void:
 	rng.randomize()
@@ -64,9 +66,9 @@ func _ready() -> void:
 	_apply_command_line_mode()
 
 func _build_ui() -> void:
-	var background = FeltBackgroundScript.new()
-	background.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(background)
+	table_view_3d = TableView3DScript.new()
+	table_view_3d.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(table_view_3d)
 
 	fireworks_overlay = FireworksOverlayScript.new()
 	fireworks_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -442,6 +444,8 @@ func _bidding_message() -> String:
 func _render() -> void:
 	if view_state.is_empty():
 		return
+	if table_view_3d:
+		table_view_3d.set_table_state(view_state, my_seat)
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":
