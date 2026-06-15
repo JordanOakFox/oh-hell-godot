@@ -136,13 +136,41 @@ func pick_hand_card(mouse_position: Vector2, display_size: Vector2) -> int:
 		var card := hand_root.get_child(i) as Node3D
 		if not card:
 			continue
+		if camera.is_position_behind(card.global_position):
+			continue
+		var bounds := _projected_card_bounds(card)
+		if bounds.size == Vector2.ZERO:
+			continue
+		var padded := bounds.grow(7.0)
+		if not padded.has_point(local_mouse):
+			continue
 		var projected := camera.unproject_position(card.global_position)
-		var normalized := Vector2((projected.x - local_mouse.x) / 39.0, (projected.y - local_mouse.y) / 58.0)
-		var distance := normalized.length()
-		if distance < best_distance and distance < 1.0:
+		var half_size: float = maxf(padded.size.length() * 0.5, 1.0)
+		var distance: float = projected.distance_to(local_mouse) / half_size
+		if distance < best_distance:
 			best_distance = distance
 			best_index = i
 	return best_index
+
+func _projected_card_bounds(card: Node3D) -> Rect2:
+	var corners := [
+		Vector3(-0.17, 0.033, -0.24),
+		Vector3(0.17, 0.033, -0.24),
+		Vector3(0.17, 0.033, 0.24),
+		Vector3(-0.17, 0.033, 0.24),
+	]
+	var min_point := Vector2(999999.0, 999999.0)
+	var max_point := Vector2(-999999.0, -999999.0)
+	for corner in corners:
+		var world_corner := card.to_global(corner)
+		if camera.is_position_behind(world_corner):
+			return Rect2()
+		var projected := camera.unproject_position(world_corner)
+		min_point.x = minf(min_point.x, projected.x)
+		min_point.y = minf(min_point.y, projected.y)
+		max_point.x = maxf(max_point.x, projected.x)
+		max_point.y = maxf(max_point.y, projected.y)
+	return Rect2(min_point, max_point - min_point)
 
 func _build_world() -> void:
 	camera = Camera3D.new()
@@ -428,6 +456,7 @@ func _rebuild_player_hand(hand: Array) -> void:
 		var card: Dictionary = hand[i]
 		var card_node := _make_readable_card(card, 1.18)
 		card_node.name = "HandCard%d" % i
+		card_node.set_meta("base_scale", 1.18)
 		_apply_hand_card_transform(card_node, i, count, false)
 		hand_root.add_child(card_node)
 
@@ -490,10 +519,12 @@ func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: b
 		spread = 2.15 / float(max(count - 1, 1))
 	var lift := 0.105 if hovered else 0.0
 	var fan_turn := offset * 4.2
+	var base_scale := float(card.get_meta("base_scale", card.scale.x))
+	card.scale = Vector3.ONE * base_scale * (1.06 if hovered else 1.0)
 	card.position = Vector3(
 		offset * spread,
 		-0.68 + lift - absf(offset) * 0.009 + sin(time * 2.0 + float(index)) * 0.003,
-		-1.22 - absf(offset) * 0.014
+		-1.22 - absf(offset) * 0.014 - (0.035 if hovered else 0.0)
 	)
 	card.rotation_degrees = Vector3(
 		69.0 + absf(offset) * 0.9 + sin(time * 1.5 + float(index)) * 0.35,
@@ -537,6 +568,23 @@ func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	var base := _box(Vector3(0.34, 0.025, 0.48), Color("#f9f4e8"))
 	base.name = "Face"
 	root.add_child(base)
+	var border := Node3D.new()
+	border.name = "HoverBorder"
+	border.visible = false
+	var border_color := Color("#f2d15a")
+	var top := _box(Vector3(0.37, 0.014, 0.014), border_color)
+	top.position = Vector3(0.0, 0.036, -0.248)
+	border.add_child(top)
+	var bottom := _box(Vector3(0.37, 0.014, 0.014), border_color)
+	bottom.position = Vector3(0.0, 0.036, 0.248)
+	border.add_child(bottom)
+	var left := _box(Vector3(0.014, 0.014, 0.51), border_color)
+	left.position = Vector3(-0.178, 0.036, 0.0)
+	border.add_child(left)
+	var right := _box(Vector3(0.014, 0.014, 0.51), border_color)
+	right.position = Vector3(0.178, 0.036, 0.0)
+	border.add_child(right)
+	root.add_child(border)
 
 	var suit := str(card.get("suit", ""))
 	var rank := int(card.get("rank", 0))
@@ -567,6 +615,9 @@ func _set_card_hover_visual(card: Node3D, hovered: bool) -> void:
 	if not face:
 		return
 	face.material_override = _mat(Color("#fff7c7") if hovered else Color("#f9f4e8"))
+	var border := card.get_node_or_null("HoverBorder") as Node3D
+	if border:
+		border.visible = hovered
 
 func _hand_signature(hand: Array) -> String:
 	var parts: Array = []
