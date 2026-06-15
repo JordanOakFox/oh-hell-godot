@@ -481,9 +481,15 @@ func _animate_player_hand() -> void:
 
 func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: bool) -> void:
 	var offset := float(index) - float(count - 1) * 0.5
-	var spread := 0.255 if count <= 8 else 1.82 / float(max(count - 1, 1))
+	var spread := 0.46
+	if count >= 4:
+		spread = 0.38
+	if count >= 6:
+		spread = 0.32
+	if count >= 8:
+		spread = 2.15 / float(max(count - 1, 1))
 	var lift := 0.105 if hovered else 0.0
-	var fan_turn := offset * 5.4
+	var fan_turn := offset * 4.2
 	card.position = Vector3(
 		offset * spread,
 		-0.68 + lift - absf(offset) * 0.009 + sin(time * 2.0 + float(index)) * 0.003,
@@ -491,7 +497,7 @@ func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: b
 	)
 	card.rotation_degrees = Vector3(
 		69.0 + absf(offset) * 0.9 + sin(time * 1.5 + float(index)) * 0.35,
-		-offset * 1.0,
+		-offset * 0.65,
 		-fan_turn
 	)
 
