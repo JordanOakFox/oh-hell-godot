@@ -650,16 +650,17 @@ func _render() -> void:
 func _render_game_end() -> void:
 	var winner_text := "Game Over"
 	if view_state["winners"].size() == 1:
-		winner_text = "%s Wins!" % view_state["winners"][0]
+		winner_text = "Winner: %s" % view_state["winners"][0]
 	elif view_state["winners"].size() > 1:
-		winner_text = "%s Tie!" % ", ".join(view_state["winners"])
+		winner_text = "Winners: %s" % ", ".join(view_state["winners"])
 
-	var text := "%s\n\nFinal Standings\n" % winner_text
+	var text := "%s\n\nLeaderboard\n" % winner_text
 	for row in view_state["standings"]:
-		text += "%d. %s - %d\n" % [int(row["place"]), row["name"], int(row["score"])]
+		text += "%d. %s  %d pts\n" % [int(row["place"]), row["name"], int(row["score"])]
 	text += "\n%s" % view_state["message"]
 	left_stats_label.text = ""
 	right_info_label.text = ""
+	table_label.add_theme_font_size_override("font_size", 22)
 	table_label.text = text
 	_render_trick()
 	_render_actions()
@@ -981,20 +982,17 @@ func _on_next_map_pressed() -> void:
 	_change_lobby_map(1)
 
 func _change_lobby_map(direction: int) -> void:
-	if multiplayer.multiplayer_peer and not multiplayer.is_server():
-		lobby_map_index = _map_index_for_id(str(view_state.get("map_id", _selected_map_id())))
-		if map_name_label:
-			map_name_label.text = _selected_map_name()
-		_set_status("Host chooses the map.")
-		return
 	lobby_map_index = posmod(lobby_map_index + direction, MAP_IDS.size())
 	if map_name_label:
 		map_name_label.text = _selected_map_name()
-	if state.has("map_id") and state.get("phase", "") == "lobby":
-		state["map_id"] = _selected_map_id()
-		_publish_state()
-		if multiplayer.multiplayer_peer and multiplayer.is_server():
-			Net.update_advertisement(_discovery_info())
+	if not _can_edit_lobby_settings():
+		lobby_map_index = _map_index_for_id(str(view_state.get("map_id", _selected_map_id())))
+		if map_name_label:
+			map_name_label.text = _selected_map_name()
+		_set_status("The table host chooses the map.")
+		return
+	if multiplayer.multiplayer_peer:
+		_request_lobby_map(_selected_map_id())
 	elif not multiplayer.multiplayer_peer:
 		_create_offline_lobby()
 
@@ -1012,7 +1010,11 @@ func _read_local_profile_input() -> void:
 	local_player_name = Profile.display_name()
 
 func _can_edit_lobby_settings() -> bool:
-	return not multiplayer.multiplayer_peer or multiplayer.is_server()
+	if not multiplayer.multiplayer_peer:
+		return true
+	if multiplayer.is_server():
+		return not dedicated_server
+	return _view_can_request_start()
 
 func _sync_lobby_settings_controls() -> void:
 	if player_count_spin:
@@ -1048,8 +1050,8 @@ func _on_player_count_changed(value: float) -> void:
 	if max_cards_spin.value > allowed:
 		max_cards_spin.value = allowed
 	lobby_max_cards = int(max_cards_spin.value)
-	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
-		_resize_host_lobby(lobby_player_count, lobby_max_cards)
+	if multiplayer.multiplayer_peer:
+		_request_lobby_settings(lobby_player_count, lobby_max_cards)
 	elif not multiplayer.multiplayer_peer:
 		_create_offline_lobby()
 
@@ -1058,8 +1060,54 @@ func _on_max_cards_changed(value: float) -> void:
 		_sync_lobby_settings_controls()
 		return
 	lobby_max_cards = int(value)
-	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
-		_resize_host_lobby(lobby_player_count, lobby_max_cards)
+	if multiplayer.multiplayer_peer:
+		_request_lobby_settings(lobby_player_count, lobby_max_cards)
+	elif not multiplayer.multiplayer_peer:
+		_create_offline_lobby()
+
+func _request_lobby_settings(player_count: int, max_cards: int) -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_update_lobby_settings.rpc_id(1, player_count, max_cards)
+	else:
+		_resize_host_lobby(player_count, max_cards)
+
+@rpc("any_peer", "reliable")
+func _server_update_lobby_settings(player_count: int, max_cards: int) -> void:
+	if not multiplayer.is_server() or not dedicated_server:
+		return
+	if state.get("phase", "") != "lobby":
+		return
+	var sender_seat := _seat_for_peer(multiplayer.get_remote_sender_id())
+	if sender_seat != _first_connected_human_seat():
+		return
+	_resize_host_lobby(player_count, max_cards)
+
+func _request_lobby_map(map_id: String) -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_update_lobby_map.rpc_id(1, map_id)
+	else:
+		_apply_lobby_map(map_id)
+
+@rpc("any_peer", "reliable")
+func _server_update_lobby_map(map_id: String) -> void:
+	if not multiplayer.is_server() or not dedicated_server:
+		return
+	if state.get("phase", "") != "lobby":
+		return
+	var sender_seat := _seat_for_peer(multiplayer.get_remote_sender_id())
+	if sender_seat != _first_connected_human_seat():
+		return
+	_apply_lobby_map(map_id)
+
+func _apply_lobby_map(map_id: String) -> void:
+	lobby_map_index = _map_index_for_id(map_id)
+	if map_name_label:
+		map_name_label.text = _selected_map_name()
+	if state.has("map_id") and state.get("phase", "") == "lobby":
+		state["map_id"] = _selected_map_id()
+		_publish_state()
+		if multiplayer.multiplayer_peer and multiplayer.is_server():
+			Net.update_advertisement(_discovery_info())
 	elif not multiplayer.multiplayer_peer:
 		_create_offline_lobby()
 
@@ -1076,7 +1124,8 @@ func _resize_host_lobby(player_count: int, max_cards: int) -> void:
 	var old_peers: Array = seat_peers.duplicate(true)
 	seat_peers = _new_seat_peers(player_count)
 
-	for seat in range(1, player_count):
+	var first_preserved_seat := 0 if dedicated_server else 1
+	for seat in range(first_preserved_seat, player_count):
 		if seat < old_peers.size():
 			seat_peers[seat] = old_peers[seat]
 
@@ -1383,10 +1432,16 @@ func _build_standings() -> Array:
 	for i in range(state["num_players"]):
 		rows.append({"name": state["names"][i], "score": state["scores"][i]})
 	rows.sort_custom(func(a, b): return int(a["score"]) > int(b["score"]))
-	var place := 1
+	var place := 0
+	var shown_place := 0
+	var last_score = null
 	for row in rows:
-		row["place"] = place
 		place += 1
+		var score := int(row["score"])
+		if last_score == null or score != int(last_score):
+			shown_place = place
+			last_score = score
+		row["place"] = shown_place
 	return rows
 
 func _publish_game_results(game_id: String, winners: Array) -> void:
