@@ -59,6 +59,7 @@ func deal_round(num_players: int, round_size: int, rng: RandomNumberGenerator) -
 	return {
 		"hands": hands,
 		"trump": deck[cursor]["suit"],
+		"trump_card": deck[cursor],
 	}
 
 func legal_cards(hand: Array, led_suit) -> Array:

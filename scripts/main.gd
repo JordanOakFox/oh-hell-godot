@@ -51,7 +51,9 @@ var map_row: HBoxContainer
 var map_name_label: Label
 var right_info_panel: VBoxContainer
 var right_info_label: Label
-var trump_symbol_label: Label
+var trump_card_panel: PanelContainer
+var trump_card_rank_label: Label
+var trump_card_suit_label: Label
 var trump_name_label: Label
 var seat_info_label: Label
 var trick_box: HBoxContainer
@@ -290,11 +292,40 @@ func _build_ui() -> void:
 	right_info_label.add_theme_color_override("font_color", Color("#f7f1e3"))
 	right_info_panel.add_child(right_info_label)
 
-	trump_symbol_label = Label.new()
-	trump_symbol_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	trump_symbol_label.add_theme_font_size_override("font_size", 76)
-	trump_symbol_label.custom_minimum_size = Vector2(0, 84)
-	right_info_panel.add_child(trump_symbol_label)
+	trump_card_panel = PanelContainer.new()
+	trump_card_panel.custom_minimum_size = Vector2(118, 158)
+	trump_card_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var trump_card_style := StyleBoxFlat.new()
+	trump_card_style.bg_color = Color("#fffaf0")
+	trump_card_style.border_color = Color("#17110c")
+	trump_card_style.set_border_width_all(3)
+	trump_card_style.set_corner_radius_all(7)
+	trump_card_panel.add_theme_stylebox_override("panel", trump_card_style)
+	right_info_panel.add_child(trump_card_panel)
+
+	var trump_card_margin := MarginContainer.new()
+	trump_card_margin.add_theme_constant_override("margin_left", 8)
+	trump_card_margin.add_theme_constant_override("margin_top", 6)
+	trump_card_margin.add_theme_constant_override("margin_right", 8)
+	trump_card_margin.add_theme_constant_override("margin_bottom", 6)
+	trump_card_panel.add_child(trump_card_margin)
+
+	var trump_card_column := VBoxContainer.new()
+	trump_card_column.alignment = BoxContainer.ALIGNMENT_CENTER
+	trump_card_column.add_theme_constant_override("separation", 4)
+	trump_card_margin.add_child(trump_card_column)
+
+	trump_card_rank_label = Label.new()
+	trump_card_rank_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	trump_card_rank_label.add_theme_font_size_override("font_size", 24)
+	trump_card_column.add_child(trump_card_rank_label)
+
+	trump_card_suit_label = Label.new()
+	trump_card_suit_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	trump_card_suit_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	trump_card_suit_label.add_theme_font_size_override("font_size", 58)
+	trump_card_suit_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	trump_card_column.add_child(trump_card_suit_label)
 
 	trump_name_label = Label.new()
 	trump_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -404,6 +435,7 @@ func _create_client_waiting_view() -> void:
 		"bid_submitted": _filled_array(lobby_player_count, false),
 		"tricks_won": _filled_array(lobby_player_count, 0),
 		"trump": "",
+		"trump_card": {},
 		"trick": [],
 		"led_suit": null,
 		"leader": 0,
@@ -441,6 +473,7 @@ func _create_lobby(message: String) -> void:
 		"bid_submitted": _filled_array(lobby_player_count, false),
 		"tricks_won": _filled_array(lobby_player_count, 0),
 		"trump": "",
+		"trump_card": {},
 		"trick": [],
 		"led_suit": null,
 		"leader": 0,
@@ -479,6 +512,7 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"bid_submitted": [],
 		"tricks_won": [],
 		"trump": "",
+		"trump_card": {},
 		"trick": [],
 		"led_suit": null,
 		"leader": 0,
@@ -501,6 +535,7 @@ func _begin_round() -> void:
 	var deal := GameRules.deal_round(state["num_players"], round_size, rng)
 	state["hands"] = deal["hands"]
 	state["trump"] = deal["trump"]
+	state["trump_card"] = deal["trump_card"]
 	state["bids"] = []
 	state["bids"].resize(state["num_players"])
 	state["bids"].fill(null)
@@ -668,12 +703,23 @@ func _render_game_end() -> void:
 
 func _render_trump_symbol() -> void:
 	var trump := str(view_state.get("trump", ""))
-	trump_symbol_label.text = SUIT_SYMBOLS.get(trump, trump)
-	trump_symbol_label.add_theme_color_override("font_color", SUIT_COLORS.get(trump, Color("#f7f1e3")))
+	var trump_card: Dictionary = view_state.get("trump_card", {})
+	var rank_text := "?"
+	if trump_card.has("rank"):
+		rank_text = _rank_text(int(trump_card["rank"]))
+	var suit_symbol: String = SUIT_SYMBOLS.get(trump, trump)
+	var color: Color = SUIT_COLORS.get(trump, Color("#17110c"))
+	trump_card_rank_label.text = "%s%s" % [rank_text, suit_symbol]
+	trump_card_rank_label.add_theme_color_override("font_color", color)
+	trump_card_suit_label.text = suit_symbol
+	trump_card_suit_label.add_theme_color_override("font_color", color)
 	var trump_name: String = GameRules.SUIT_NAMES.get(trump, trump)
-	trump_name_label.text = trump_name
+	trump_name_label.text = "%s of %s" % [rank_text, trump_name] if trump_card.has("rank") else trump_name
 	trump_name_label.add_theme_color_override("font_color", SUIT_COLORS.get(trump, Color("#f7f1e3")))
-	trump_symbol_label.tooltip_text = trump_name
+	trump_card_panel.tooltip_text = "Trump card: %s" % trump_name_label.text
+
+func _rank_text(rank: int) -> String:
+	return str(GameRules.RANK_NAMES.get(rank, rank))
 
 func _discovery_info() -> Dictionary:
 	var connected_count := _connected_count()
@@ -1666,6 +1712,7 @@ func _return_to_lobby(message: String) -> void:
 		"bid_submitted": _filled_array(lobby_player_count, false),
 		"tricks_won": _filled_array(lobby_player_count, 0),
 		"trump": "",
+		"trump_card": {},
 		"trick": [],
 		"led_suit": null,
 		"leader": 0,
