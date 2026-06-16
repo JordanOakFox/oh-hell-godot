@@ -14,6 +14,7 @@ var advertise_info := {}
 var advertise_elapsed := 0.0
 var discovery_enabled := false
 var advertising_enabled := false
+var current_port := DEFAULT_PORT
 
 func _process(delta: float) -> void:
 	if advertising_enabled:
@@ -29,6 +30,7 @@ func host(port: int = DEFAULT_PORT, max_clients: int = 9) -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(port, max_clients)
 	if err == OK:
+		current_port = port
 		multiplayer.multiplayer_peer = peer
 		connection_changed.emit("Hosting on port %d" % port)
 	return err
@@ -37,6 +39,7 @@ func join(address: String, port: int = DEFAULT_PORT) -> Error:
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(address, port)
 	if err == OK:
+		current_port = port
 		multiplayer.multiplayer_peer = peer
 		connection_changed.emit("Joining %s:%d" % [address, port])
 	return err
@@ -46,6 +49,7 @@ func stop() -> void:
 	if multiplayer.multiplayer_peer:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = null
+	current_port = DEFAULT_PORT
 	connection_changed.emit("Offline")
 
 func is_host() -> bool:
@@ -109,7 +113,7 @@ func _send_discovery_advertisement() -> void:
 		return
 	var payload := advertise_info.duplicate(true)
 	payload["magic"] = DISCOVERY_MAGIC
-	payload["port"] = DEFAULT_PORT
+	payload["port"] = current_port
 	payload["time"] = Time.get_unix_time_from_system()
 	discovery_sender.put_packet(JSON.stringify(payload).to_utf8_buffer())
 

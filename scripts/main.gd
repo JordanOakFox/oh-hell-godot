@@ -31,6 +31,7 @@ var seat_peers: Array = []
 var lobby_player_count := DEFAULT_PLAYERS
 var lobby_max_cards := DEFAULT_MAX_CARDS
 var lobby_map_index := 0
+var server_port := Net.DEFAULT_PORT
 var local_player_name := "Player"
 var local_profile_id := ""
 var recorded_game_ids := {}
@@ -148,8 +149,8 @@ func _build_ui() -> void:
 
 	address_input = LineEdit.new()
 	address_input.text = "127.0.0.1"
-	address_input.placeholder_text = "Host IP"
-	address_input.custom_minimum_size = Vector2(160, 0)
+	address_input.placeholder_text = "Host IP or IP:port"
+	address_input.custom_minimum_size = Vector2(190, 0)
 	net_row.add_child(address_input)
 
 	var join_button := Button.new()
@@ -347,7 +348,8 @@ func _build_ui() -> void:
 
 func _on_host_pressed() -> void:
 	_read_lobby_inputs()
-	var err := Net.host()
+	server_port = _command_line_int("--port", server_port, 1, 65535)
+	var err := Net.host(server_port)
 	if err != OK:
 		_set_status("Host failed: %s" % error_string(err))
 		return
@@ -360,11 +362,12 @@ func _start_dedicated_server() -> void:
 	dedicated_server = true
 	lobby_player_count = _command_line_int("--players", DEFAULT_PLAYERS, 2, 10)
 	lobby_max_cards = _command_line_int("--cards", DEFAULT_MAX_CARDS, 1, GameRules.max_allowed_cards(lobby_player_count))
+	server_port = _command_line_int("--port", Net.DEFAULT_PORT, 1, 65535)
 	var map_arg := _command_line_value("--map")
 	if not map_arg.is_empty():
 		lobby_map_index = _map_index_for_id(map_arg)
 	local_player_name = "Dedicated Server"
-	var err := Net.host()
+	var err := Net.host(server_port)
 	if err != OK:
 		push_error("Dedicated server failed: %s" % error_string(err))
 		get_tree().quit(1)
@@ -373,14 +376,15 @@ func _start_dedicated_server() -> void:
 	seat_peers = _new_seat_peers(lobby_player_count)
 	_create_lobby("Dedicated server online. Players can join.")
 	Net.start_advertising(_discovery_info())
-	print("Oh Hell dedicated server listening on port %d" % Net.DEFAULT_PORT)
+	print("Oh Hell dedicated server listening on port %d" % server_port)
 
 func _on_join_pressed() -> void:
 	_read_local_profile_input()
 	var address := address_input.text.strip_edges()
 	if address.is_empty():
 		address = "127.0.0.1"
-	var err := Net.join(address)
+	var endpoint := _parse_join_endpoint(address, _command_line_int("--port", Net.DEFAULT_PORT, 1, 65535))
+	var err := Net.join(endpoint["address"], endpoint["port"])
 	if err != OK:
 		_set_status("Join failed: %s" % error_string(err))
 	else:
@@ -414,6 +418,19 @@ func _command_line_int(name: String, fallback: int, minimum: int, maximum: int) 
 	if value.is_valid_int():
 		return clampi(int(value), minimum, maximum)
 	return fallback
+
+func _parse_join_endpoint(text: String, fallback_port: int) -> Dictionary:
+	var endpoint := text.strip_edges()
+	var port := fallback_port
+	var address := endpoint
+	if endpoint.count(":") == 1:
+		var parts := endpoint.split(":", false, 1)
+		if parts.size() == 2 and str(parts[1]).is_valid_int():
+			address = str(parts[0]).strip_edges()
+			port = clampi(int(parts[1]), 1, 65535)
+	if address.is_empty():
+		address = "127.0.0.1"
+	return {"address": address, "port": port}
 
 func _create_offline_lobby() -> void:
 	my_seat = 0
@@ -732,6 +749,7 @@ func _discovery_info() -> Dictionary:
 		"players": connected_count,
 		"max_players": lobby_player_count,
 		"max_cards": lobby_max_cards,
+		"port": server_port,
 		"map_id": _selected_map_id(),
 		"map_name": _selected_map_name(),
 		"phase": state.get("phase", "lobby"),
@@ -749,7 +767,7 @@ func _render_lobby() -> void:
 	]
 	text += "You are seat %d: %s\n" % [my_seat + 1, view_state["names"][my_seat]]
 	if multiplayer.multiplayer_peer and multiplayer.is_server():
-		var addresses := Net.local_join_addresses()
+		var addresses := Net.local_join_addresses(server_port)
 		if addresses.is_empty():
 			text += "Join: local network IP not found\n"
 		else:
@@ -1224,7 +1242,7 @@ func _on_join_found_pressed() -> void:
 		_set_status("Choose a discovered game first.")
 		return
 	var game: Dictionary = discovered_games[index]
-	address_input.text = str(game.get("address", ""))
+	address_input.text = "%s:%d" % [str(game.get("address", "")), int(game.get("port", Net.DEFAULT_PORT))]
 	_on_join_pressed()
 
 func _on_bid_button_pressed(button: Button) -> void:
