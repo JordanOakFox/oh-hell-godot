@@ -344,7 +344,7 @@ func _start_dedicated_server() -> void:
 	print("Oh Hell dedicated server listening on port %d" % Net.DEFAULT_PORT)
 
 func _on_join_pressed() -> void:
-	_read_lobby_inputs()
+	_read_local_profile_input()
 	var address := address_input.text.strip_edges()
 	if address.is_empty():
 		address = "127.0.0.1"
@@ -563,6 +563,9 @@ func _render() -> void:
 	if view_state.is_empty():
 		return
 	lobby_map_index = _map_index_for_id(str(view_state.get("map_id", _selected_map_id())))
+	lobby_player_count = int(view_state.get("num_players", lobby_player_count))
+	lobby_max_cards = int(view_state.get("max_cards", lobby_max_cards))
+	_sync_lobby_settings_controls()
 	if map_name_label:
 		map_name_label.text = _selected_map_name()
 	var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
@@ -979,6 +982,9 @@ func _on_next_map_pressed() -> void:
 
 func _change_lobby_map(direction: int) -> void:
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		lobby_map_index = _map_index_for_id(str(view_state.get("map_id", _selected_map_id())))
+		if map_name_label:
+			map_name_label.text = _selected_map_name()
 		_set_status("Host chooses the map.")
 		return
 	lobby_map_index = posmod(lobby_map_index + direction, MAP_IDS.size())
@@ -993,14 +999,33 @@ func _change_lobby_map(direction: int) -> void:
 		_create_offline_lobby()
 
 func _read_lobby_inputs() -> void:
+	_read_local_profile_input()
+	lobby_player_count = int(player_count_spin.value)
+	lobby_max_cards = int(max_cards_spin.value)
+	lobby_max_cards = clampi(lobby_max_cards, 1, GameRules.max_allowed_cards(lobby_player_count))
+
+func _read_local_profile_input() -> void:
 	local_player_name = name_input.text.strip_edges()
 	if local_player_name.is_empty():
 		local_player_name = "Player"
 	Profile.set_display_name(local_player_name)
 	local_player_name = Profile.display_name()
-	lobby_player_count = int(player_count_spin.value)
-	lobby_max_cards = int(max_cards_spin.value)
-	lobby_max_cards = clampi(lobby_max_cards, 1, GameRules.max_allowed_cards(lobby_player_count))
+
+func _can_edit_lobby_settings() -> bool:
+	return not multiplayer.multiplayer_peer or multiplayer.is_server()
+
+func _sync_lobby_settings_controls() -> void:
+	if player_count_spin:
+		player_count_spin.editable = _can_edit_lobby_settings()
+		player_count_spin.set_block_signals(true)
+		player_count_spin.value = lobby_player_count
+		player_count_spin.set_block_signals(false)
+	if max_cards_spin:
+		max_cards_spin.editable = _can_edit_lobby_settings()
+		max_cards_spin.set_block_signals(true)
+		max_cards_spin.max_value = GameRules.max_allowed_cards(lobby_player_count)
+		max_cards_spin.value = clampi(lobby_max_cards, 1, GameRules.max_allowed_cards(lobby_player_count))
+		max_cards_spin.set_block_signals(false)
 
 func _on_name_changed(new_text: String) -> void:
 	local_player_name = new_text.strip_edges()
@@ -1014,6 +1039,9 @@ func _on_name_changed(new_text: String) -> void:
 		_publish_state()
 
 func _on_player_count_changed(value: float) -> void:
+	if not _can_edit_lobby_settings():
+		_sync_lobby_settings_controls()
+		return
 	lobby_player_count = int(value)
 	var allowed := GameRules.max_allowed_cards(lobby_player_count)
 	max_cards_spin.max_value = allowed
@@ -1026,6 +1054,9 @@ func _on_player_count_changed(value: float) -> void:
 		_create_offline_lobby()
 
 func _on_max_cards_changed(value: float) -> void:
+	if not _can_edit_lobby_settings():
+		_sync_lobby_settings_controls()
+		return
 	lobby_max_cards = int(value)
 	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
 		_resize_host_lobby(lobby_player_count, lobby_max_cards)
