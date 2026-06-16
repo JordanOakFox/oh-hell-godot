@@ -798,21 +798,22 @@ func _update_camera() -> void:
 func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	var root := Node3D.new()
 	root.scale = Vector3.ONE * scale_factor
-	var shadow := _box(Vector3(0.36, 0.012, 0.5), Color(0, 0, 0, 0.32))
+	var shadow := _box(Vector3(0.37, 0.012, 0.51), Color(0, 0, 0, 0.42))
 	shadow.name = "Shadow"
 	shadow.position = Vector3(0.018, -0.012, 0.018)
 	root.add_child(shadow)
-	var edge := _box(Vector3(0.36, 0.026, 0.5), Color("#372f28"))
+	var edge := _box(Vector3(0.37, 0.028, 0.51), Color("#05070d"))
 	edge.name = "Edge"
 	root.add_child(edge)
-	var base := _box(Vector3(0.34, 0.025, 0.48), Color("#f9f4e8"))
+	var base := _box(Vector3(0.34, 0.025, 0.48), Color("#fffaf0"))
 	base.name = "Face"
+	base.material_override = _card_face_mat(Color("#fffaf0"))
 	base.position = Vector3(0, 0.006, 0)
 	root.add_child(base)
 	var border := Node3D.new()
 	border.name = "HoverBorder"
 	border.visible = false
-	var border_color := Color("#f2d15a")
+	var border_color := Color("#ffe066")
 	var top := _box(Vector3(0.37, 0.014, 0.014), border_color)
 	top.position = Vector3(0.0, 0.036, -0.248)
 	border.add_child(top)
@@ -843,10 +844,10 @@ func _add_card_label(root: Node3D, text: String, position: Vector3, font_size: i
 	label.font_size = font_size
 	label.pixel_size = pixel_size
 	label.modulate = color
-	label.outline_size = 1
-	label.outline_modulate = Color("#f9f4e8")
+	label.outline_size = 2
+	label.outline_modulate = Color("#fffaf0")
 	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	label.no_depth_test = false
+	label.no_depth_test = true
 	label.position = position
 	label.rotation_degrees = Vector3(-90, 0, spin_degrees)
 	root.add_child(label)
@@ -855,7 +856,7 @@ func _set_card_hover_visual(card: Node3D, hovered: bool) -> void:
 	var face := card.get_node_or_null("Face") as MeshInstance3D
 	if not face:
 		return
-	face.material_override = _mat(Color("#fff3a8") if hovered else Color("#f9f4e8"))
+	face.material_override = _card_face_mat(Color("#fff1a6") if hovered else Color("#fffaf0"))
 	var shadow := card.get_node_or_null("Shadow") as MeshInstance3D
 	if shadow:
 		shadow.visible = not hovered
@@ -893,4 +894,9 @@ func _mat(color: Color) -> StandardMaterial3D:
 	material.albedo_color = color
 	material.roughness = 0.88
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	return material
+
+func _card_face_mat(color: Color) -> StandardMaterial3D:
+	var material := _mat(color)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	return material

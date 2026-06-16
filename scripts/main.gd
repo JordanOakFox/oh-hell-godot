@@ -681,9 +681,7 @@ func _render_trick() -> void:
 		child.queue_free()
 
 	if view_state["trick"].is_empty():
-		if view_state["phase"] == "bidding":
-			_render_shuffle_stack()
-		else:
+		if view_state["phase"] != "bidding":
 			var empty := Label.new()
 			empty.text = "Table is clear"
 			empty.add_theme_font_size_override("font_size", 22)
