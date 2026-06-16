@@ -149,7 +149,7 @@ func pick_hand_card(mouse_position: Vector2, display_size: Vector2) -> int:
 		var bounds := _projected_card_bounds(card)
 		if bounds.size == Vector2.ZERO:
 			continue
-		var padded := bounds.grow(7.0)
+		var padded := bounds.grow(5.0)
 		if not padded.has_point(local_mouse):
 			continue
 		var projected := camera.unproject_position(card.global_position)
@@ -650,9 +650,9 @@ func _rebuild_player_hand(hand: Array) -> void:
 	var count := hand.size()
 	for i in range(count):
 		var card: Dictionary = hand[i]
-		var card_node := _make_readable_card(card, 1.18)
+		var card_node := _make_readable_card(card, 0.84)
 		card_node.name = "HandCard%d" % i
-		card_node.set_meta("base_scale", 1.18)
+		card_node.set_meta("base_scale", 0.84)
 		_apply_hand_card_transform(card_node, i, count, false)
 		hand_root.add_child(card_node)
 
@@ -706,25 +706,23 @@ func _animate_player_hand() -> void:
 
 func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: bool) -> void:
 	var offset := float(index) - float(count - 1) * 0.5
-	var spread := 0.46
-	if count >= 4:
-		spread = 0.38
-	if count >= 6:
-		spread = 0.32
-	if count >= 8:
-		spread = 2.15 / float(max(count - 1, 1))
-	var lift := 0.105 if hovered else 0.0
-	var fan_turn := offset * 4.2
+	var spread := 0.43
+	if count >= 7:
+		spread = 0.36
+	if count >= 10:
+		spread = 3.25 / float(max(count - 1, 1))
+	var lift := 0.095 if hovered else 0.0
+	var fan_turn := offset * 2.4
 	var base_scale := float(card.get_meta("base_scale", card.scale.x))
-	card.scale = Vector3.ONE * base_scale * (1.06 if hovered else 1.0)
+	card.scale = Vector3.ONE * base_scale * (1.08 if hovered else 1.0)
 	card.position = Vector3(
 		offset * spread,
-		-0.68 + lift - absf(offset) * 0.009 + sin(time * 2.0 + float(index)) * 0.003,
-		-1.22 - absf(offset) * 0.014 - (0.035 if hovered else 0.0)
+		-0.69 + lift - absf(offset) * 0.006 + sin(time * 2.0 + float(index)) * 0.002,
+		-1.34 - absf(offset) * 0.008 - (0.04 if hovered else 0.0)
 	)
 	card.rotation_degrees = Vector3(
-		69.0 + absf(offset) * 0.9 + sin(time * 1.5 + float(index)) * 0.35,
-		-offset * 0.65,
+		68.0 + absf(offset) * 0.45 + sin(time * 1.5 + float(index)) * 0.25,
+		-offset * 0.25,
 		-fan_turn
 	)
 
