@@ -39,6 +39,7 @@ var last_hand_signature := ""
 var last_shuffle_round_key := ""
 var bot_action_key := ""
 var hovered_3d_card_index := -1
+var dedicated_server := false
 
 var title_label: Label
 var status_label: Label
@@ -323,6 +324,25 @@ func _on_host_pressed() -> void:
 	_create_lobby("Hosting. Waiting for players...")
 	Net.start_advertising(_discovery_info())
 
+func _start_dedicated_server() -> void:
+	dedicated_server = true
+	lobby_player_count = _command_line_int("--players", DEFAULT_PLAYERS, 2, 10)
+	lobby_max_cards = _command_line_int("--cards", DEFAULT_MAX_CARDS, 1, GameRules.max_allowed_cards(lobby_player_count))
+	var map_arg := _command_line_value("--map")
+	if not map_arg.is_empty():
+		lobby_map_index = _map_index_for_id(map_arg)
+	local_player_name = "Dedicated Server"
+	var err := Net.host()
+	if err != OK:
+		push_error("Dedicated server failed: %s" % error_string(err))
+		get_tree().quit(1)
+		return
+	my_seat = -1
+	seat_peers = _new_seat_peers(lobby_player_count)
+	_create_lobby("Dedicated server online. Players can join.")
+	Net.start_advertising(_discovery_info())
+	print("Oh Hell dedicated server listening on port %d" % Net.DEFAULT_PORT)
+
 func _on_join_pressed() -> void:
 	_read_lobby_inputs()
 	var address := address_input.text.strip_edges()
@@ -337,10 +357,31 @@ func _on_join_pressed() -> void:
 
 func _apply_command_line_mode() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.has("--host"):
+	if args.has("--server"):
+		_start_dedicated_server()
+	elif args.has("--host"):
 		_on_host_pressed()
 	elif args.has("--join"):
+		var address_arg := _command_line_value("--address")
+		if not address_arg.is_empty():
+			address_input.text = address_arg
 		_on_join_pressed()
+
+func _command_line_value(name: String) -> String:
+	var args := OS.get_cmdline_user_args()
+	for i in range(args.size()):
+		var arg := str(args[i])
+		if arg.begins_with("%s=" % name):
+			return arg.split("=", true, 1)[1]
+		if arg == name and i + 1 < args.size():
+			return str(args[i + 1])
+	return ""
+
+func _command_line_int(name: String, fallback: int, minimum: int, maximum: int) -> int:
+	var value := _command_line_value(name)
+	if value.is_valid_int():
+		return clampi(int(value), minimum, maximum)
+	return fallback
 
 func _create_offline_lobby() -> void:
 	my_seat = 0
@@ -715,11 +756,11 @@ func _render_actions() -> void:
 			ready_button.pressed.connect(_request_toggle_ready)
 			action_box.add_child(ready_button)
 
-		if multiplayer.multiplayer_peer and multiplayer.is_server():
+		if multiplayer.multiplayer_peer and (multiplayer.is_server() or _view_can_request_start()):
 			var start_button := Button.new()
 			start_button.text = "Start Game"
 			start_button.disabled = not _view_lobby_can_start()
-			start_button.pressed.connect(_host_start_game)
+			start_button.pressed.connect(_request_start_game)
 			action_box.add_child(start_button)
 
 		var waiting := Label.new()
@@ -901,6 +942,14 @@ func _view_lobby_can_start() -> bool:
 		if not view_state["ready"][i]:
 			return false
 	return human_count > 0
+
+func _view_can_request_start() -> bool:
+	if view_state.is_empty() or view_state.get("phase", "") != "lobby":
+		return false
+	for seat in range(view_state["num_players"]):
+		if view_state["connected"][seat] and not (view_state.has("bots") and bool(view_state["bots"][seat])):
+			return seat == my_seat
+	return false
 
 func _play_again_count() -> int:
 	if not view_state.has("play_again"):
@@ -1348,12 +1397,12 @@ func _receive_game_result(result: Dictionary) -> void:
 	_set_status(Profile.stats_line())
 
 func _peer_for_seat(seat: int) -> int:
-	if seat == 0:
+	if seat == 0 and not dedicated_server:
 		return 1
 	return int(seat_peers[seat])
 
 func _seat_for_peer(peer_id: int) -> int:
-	if peer_id == 1:
+	if peer_id == 1 and not dedicated_server:
 		return 0
 	return seat_peers.find(peer_id)
 
@@ -1409,6 +1458,21 @@ func _apply_toggle_ready(seat: int) -> void:
 	state["message"] = "%s is %s." % [state["names"][seat], "ready" if state["ready"][seat] else "not ready"]
 	_publish_state()
 
+func _request_start_game() -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_start_game.rpc_id(1)
+	else:
+		_host_start_game()
+
+@rpc("any_peer", "reliable")
+func _server_start_game() -> void:
+	if not multiplayer.is_server():
+		return
+	var sender_seat := _seat_for_peer(multiplayer.get_remote_sender_id())
+	if dedicated_server and sender_seat != _first_connected_human_seat():
+		return
+	_host_start_game()
+
 func _host_start_game() -> void:
 	if not multiplayer.is_server():
 		return
@@ -1421,6 +1485,14 @@ func _host_start_game() -> void:
 	_fill_empty_seats_with_bots()
 	Net.stop_discovery()
 	_start_match(state["names"].duplicate(true), state["max_cards"])
+
+func _first_connected_human_seat() -> int:
+	if state.is_empty():
+		return -1
+	for seat in range(state["num_players"]):
+		if seat < seat_peers.size() and int(seat_peers[seat]) != 0 and not _is_bot_seat(seat):
+			return seat
+	return -1
 
 func _fill_empty_seats_with_bots() -> void:
 	var bots: Array = state.get("bots", _filled_array(state["num_players"], false))
@@ -1537,6 +1609,8 @@ func _on_peer_connected(peer_id: int) -> void:
 	state["connected"] = _connected_seats()
 	state["ready"] = _lobby_ready_seats()
 	state["message"] = "Seat %d joined." % [seat + 1]
+	if dedicated_server:
+		print("Peer %d joined seat %d" % [peer_id, seat + 1])
 	_publish_state()
 	Net.update_advertisement(_discovery_info())
 
@@ -1552,11 +1626,14 @@ func _on_peer_disconnected(peer_id: int) -> void:
 	if state.has("play_again") and seat < state["play_again"].size():
 		state["play_again"][seat] = false
 	state["message"] = "Seat %d disconnected." % [seat + 1]
+	if dedicated_server:
+		print("Peer %d disconnected from seat %d" % [peer_id, seat + 1])
 	_publish_state()
 	Net.update_advertisement(_discovery_info())
 
 func _first_open_seat() -> int:
-	for seat in range(1, seat_peers.size()):
+	var first_seat := 0 if dedicated_server else 1
+	for seat in range(first_seat, seat_peers.size()):
 		if int(seat_peers[seat]) == 0:
 			return seat
 	return -1
@@ -1564,7 +1641,7 @@ func _first_open_seat() -> int:
 func _new_seat_peers(count: int) -> Array:
 	var peers: Array = []
 	for seat in range(count):
-		peers.append(1 if seat == 0 else 0)
+		peers.append(1 if seat == 0 and not dedicated_server else 0)
 	return peers
 
 func _default_names(count: int) -> Array:
