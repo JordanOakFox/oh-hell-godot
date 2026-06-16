@@ -261,6 +261,7 @@ func _build_ui() -> void:
 	table_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	table_label.add_theme_font_size_override("font_size", 18)
 	table_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	table_label.clip_text = true
 	table_label.custom_minimum_size = Vector2(0, 68)
 	center_column.add_child(table_label)
 
@@ -540,6 +541,7 @@ func _render() -> void:
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":
+		table_label.add_theme_font_size_override("font_size", 18)
 		trick_box.visible = true
 		hand_box.visible = true
 		left_stats_label.visible = false
@@ -561,6 +563,7 @@ func _render() -> void:
 		_render_lobby()
 		return
 	if view_state["phase"] == "game_end":
+		table_label.add_theme_font_size_override("font_size", 18)
 		trick_box.visible = true
 		hand_box.visible = true
 		left_stats_label.visible = false
@@ -572,6 +575,7 @@ func _render() -> void:
 	hand_box.visible = true
 	left_stats_label.visible = true
 	right_info_panel.visible = true
+	table_label.add_theme_font_size_override("font_size", 18)
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
 	right_info_label.text = "Round %d / %d\nCards: %d\n\nTrump" % [
 		view_state["round_index"] + 1,
@@ -643,30 +647,30 @@ func _discovery_info() -> Dictionary:
 func _render_lobby() -> void:
 	left_stats_label.text = ""
 	right_info_label.text = ""
-	var text := "Multiplayer Lobby\n\n"
-	text += "Table: %d players, %d max cards\n" % [view_state["num_players"], view_state["max_cards"]]
-	text += "Map: %s\n" % MAP_NAMES.get(str(view_state.get("map_id", _selected_map_id())), _selected_map_name())
-	text += "You are seat %d: %s\n\n" % [my_seat + 1, view_state["names"][my_seat]]
+	table_label.add_theme_font_size_override("font_size", 16)
+	var text := "Multiplayer Lobby\n"
+	text += "%d players | %d max cards | %s\n" % [
+		view_state["num_players"],
+		view_state["max_cards"],
+		MAP_NAMES.get(str(view_state.get("map_id", _selected_map_id())), _selected_map_name()),
+	]
+	text += "You are seat %d: %s\n" % [my_seat + 1, view_state["names"][my_seat]]
 	if multiplayer.multiplayer_peer and multiplayer.is_server():
 		var addresses := Net.local_join_addresses()
 		if addresses.is_empty():
-			text += "Join address: local network IP not found\n"
+			text += "Join: local network IP not found\n"
 		else:
-			text += "Join address: %s\n" % ", ".join(addresses)
-		text += "\n"
+			text += "Join: %s\n" % ", ".join(addresses)
+	var seat_parts: Array = []
 	for i in range(view_state["num_players"]):
 		var status := "waiting"
 		if view_state.has("bots") and view_state["bots"][i]:
 			status = "bot"
 		elif view_state["connected"][i]:
 			status = "ready" if view_state["ready"][i] else "not ready"
-		var profile_text := ""
-		if view_state.has("profiles") and i < view_state["profiles"].size():
-			var profile: Dictionary = view_state["profiles"][i]
-			if int(profile.get("games_played", 0)) > 0:
-				profile_text = " (%dW/%dG)" % [int(profile.get("wins", 0)), int(profile.get("games_played", 0))]
-		text += "Seat %d: %s%s - %s\n" % [i + 1, view_state["names"][i], profile_text, status]
-	text += "\n%s" % view_state["message"]
+		seat_parts.append("%d %s: %s" % [i + 1, view_state["names"][i], status])
+	text += "Seats: %s\n" % " | ".join(seat_parts)
+	text += view_state["message"]
 	table_label.text = text
 	_render_trick()
 	_render_actions()
