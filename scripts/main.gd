@@ -196,11 +196,19 @@ func _build_ui() -> void:
 
 	left_stats_label = Label.new()
 	left_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	left_stats_label.add_theme_font_size_override("font_size", 14)
+	left_stats_label.add_theme_font_size_override("font_size", 15)
 	left_stats_label.add_theme_color_override("font_color", Color("#f7f1e3"))
-	left_stats_label.custom_minimum_size = Vector2(240, 0)
-	left_stats_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	play_row.add_child(left_stats_label)
+	left_stats_label.add_theme_color_override("font_shadow_color", Color("#17110c"))
+	left_stats_label.add_theme_constant_override("shadow_offset_x", 2)
+	left_stats_label.add_theme_constant_override("shadow_offset_y", 2)
+	left_stats_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	left_stats_label.offset_left = 18
+	left_stats_label.offset_top = -82
+	left_stats_label.offset_right = 258
+	left_stats_label.offset_bottom = -18
+	left_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left_stats_label.visible = false
+	add_child(left_stats_label)
 
 	var center_column := VBoxContainer.new()
 	center_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -519,20 +527,16 @@ func _render() -> void:
 		view_state["names"][my_seat],
 	]
 	_render_trump_symbol()
-	var stats_text := "Scores\n"
-	for i in range(view_state["num_players"]):
-		var bid_text := "?"
-		if view_state["phase"] == "bidding":
-			bid_text = "in" if view_state["bid_submitted"][i] else "..."
-		elif view_state["bids"][i] != null:
-			bid_text = str(view_state["bids"][i])
-		stats_text += "%s: %d pts | bid %s | tricks %d\n" % [
-			view_state["names"][i],
-			view_state["scores"][i],
-			bid_text,
-			view_state["tricks_won"][i],
-		]
-	left_stats_label.text = stats_text.strip_edges()
+	var my_bid_text := "?"
+	if view_state["phase"] == "bidding":
+		my_bid_text = "in" if view_state["bid_submitted"][my_seat] else "..."
+	elif view_state["bids"][my_seat] != null:
+		my_bid_text = str(view_state["bids"][my_seat])
+	left_stats_label.text = "You: %d pts\nBid %s | Tricks %d" % [
+		view_state["scores"][my_seat],
+		my_bid_text,
+		view_state["tricks_won"][my_seat],
+	]
 	table_label.text = view_state["message"]
 
 	_render_trick()

@@ -386,14 +386,31 @@ func _make_avatar(seat: int) -> Node3D:
 	var name_label := Label3D.new()
 	name_label.name = "Name"
 	name_label.text = "P%d" % (seat + 1)
-	name_label.font_size = 34
+	name_label.font_size = 28
 	name_label.modulate = Color("#f9f4e8")
 	name_label.outline_size = 6
 	name_label.outline_modulate = Color("#17110c")
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_label.no_depth_test = true
-	name_label.position = Vector3(0, 1.55, 0)
+	name_label.position = Vector3(0, 1.5, 0)
 	root.add_child(name_label)
+
+	var score_label := Label3D.new()
+	score_label.name = "Score"
+	score_label.text = "0 pts | bid ... | tricks 0"
+	score_label.font_size = 20
+	score_label.modulate = Color("#f7f1e3")
+	score_label.outline_size = 5
+	score_label.outline_modulate = Color("#17110c")
+	score_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	score_label.no_depth_test = true
+	score_label.position = Vector3(0, 1.73, 0)
+	root.add_child(score_label)
+
+	var trick_pile := Node3D.new()
+	trick_pile.name = "TrickPile"
+	trick_pile.position = Vector3(0.62, 0.15, -0.08)
+	root.add_child(trick_pile)
 
 	var active_marker := _box(Vector3(0.82, 0.035, 0.82), Color("#f0d28a"))
 	active_marker.name = "Active"
@@ -409,6 +426,8 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 	var phase := str(table_state.get("phase", ""))
 	var bids: Array = table_state.get("bids", [])
 	var tricks: Array = table_state.get("tricks_won", [])
+	var scores: Array = table_state.get("scores", [])
+	var submitted_bids: Array = table_state.get("bid_submitted", [])
 	for seat in range(min(seats.size(), seat_count)):
 		var avatar: Node3D = seats[seat]
 		var label := avatar.get_node_or_null("Name") as Label3D
@@ -419,6 +438,16 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 			var display_name := "You" if seat == my_seat else name
 			label.text = "%s ◄" % display_name if seat == current_active else display_name
 			label.modulate = Color("#f0d28a") if seat == current_active else Color("#f9f4e8")
+		var score_label := avatar.get_node_or_null("Score") as Label3D
+		if score_label:
+			score_label.text = _seat_score_text(seat, phase, scores, bids, submitted_bids, tricks)
+			score_label.modulate = Color("#f0d28a") if seat == current_active else Color("#f7f1e3")
+		var trick_pile := avatar.get_node_or_null("TrickPile") as Node3D
+		if trick_pile:
+			var pile_count := 0
+			if seat < tricks.size():
+				pile_count = int(tricks[seat])
+			_update_trick_pile(trick_pile, pile_count)
 		var active := avatar.get_node_or_null("Active") as Node3D
 		if active:
 			active.visible = seat == current_active
@@ -430,6 +459,43 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 		var mouth := avatar.get_node_or_null("Mouth") as Node3D
 		if mouth:
 			mouth.rotation_degrees.z = 0 if mood != "sad" else 12
+
+func _seat_score_text(seat: int, phase: String, scores: Array, bids: Array, submitted_bids: Array, tricks: Array) -> String:
+	var points := 0
+	if seat < scores.size():
+		points = int(scores[seat])
+	var trick_count := 0
+	if seat < tricks.size():
+		trick_count = int(tricks[seat])
+	var bid_text := "?"
+	if phase == "bidding":
+		bid_text = "in" if seat < submitted_bids.size() and bool(submitted_bids[seat]) else "..."
+	elif seat < bids.size() and bids[seat] != null:
+		bid_text = str(bids[seat])
+	return "%d pts | bid %s | tricks %d" % [points, bid_text, trick_count]
+
+func _update_trick_pile(pile: Node3D, trick_count: int) -> void:
+	for child in pile.get_children():
+		child.queue_free()
+	if trick_count <= 0:
+		return
+	var visible_cards: int = mini(trick_count, 8)
+	for i in range(visible_cards):
+		var card := _box(Vector3(0.2, 0.018, 0.28), Color("#f9f4e8"))
+		card.position = Vector3(float(i) * 0.018, float(i) * 0.012, float(i) * -0.01)
+		card.rotation_degrees = Vector3(0, 10 + float(i) * 3.0, 0)
+		pile.add_child(card)
+	if trick_count > 1:
+		var count_label := Label3D.new()
+		count_label.text = "x%d" % trick_count
+		count_label.font_size = 18
+		count_label.modulate = Color("#f0d28a")
+		count_label.outline_size = 4
+		count_label.outline_modulate = Color("#17110c")
+		count_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		count_label.no_depth_test = true
+		count_label.position = Vector3(0.18, 0.2, 0)
+		pile.add_child(count_label)
 
 func _update_trick(table_state: Dictionary) -> void:
 	for child in trick_root.get_children():
