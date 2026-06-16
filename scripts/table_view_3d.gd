@@ -190,7 +190,16 @@ func _build_world() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-44, -32, 0)
 	sun.light_energy = 1.6
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	world_root.add_child(sun)
+
+	var fill := OmniLight3D.new()
+	fill.position = Vector3(0, 3.4, 2.4)
+	fill.light_energy = 0.85
+	fill.omni_range = 7.0
+	fill.shadow_enabled = true
+	world_root.add_child(fill)
 
 	var ambient := WorldEnvironment.new()
 	var env := Environment.new()
@@ -267,6 +276,11 @@ func _build_pirate_map() -> void:
 	var deck := _box(Vector3(6.5, 0.22, 4.1), Color("#8b552f"))
 	deck.position = Vector3(0, -0.08, 0)
 	ship_root.add_child(deck)
+	for plank in range(9):
+		var plank_tint := Color("#9b6239") if plank % 2 == 0 else Color("#7d4a2b")
+		var plank_board := _box(Vector3(0.62, 0.035, 3.95), plank_tint)
+		plank_board.position = Vector3(-2.75 + float(plank) * 0.68, 0.055, 0)
+		ship_root.add_child(plank_board)
 
 	var hull := _box(Vector3(7.0, 0.42, 4.55), Color("#5a2f1d"))
 	hull.position = Vector3(0, -0.35, 0)
@@ -329,6 +343,11 @@ func _build_space_map() -> void:
 		var panel := _box(Vector3(0.55, 0.08, 0.18), Color("#6fd3ff"))
 		panel.position = Vector3(-1.1 + float(i) * 0.55, 0.18, -3.0)
 		ship_root.add_child(panel)
+	for i in range(3):
+		var planet := _cylinder(0.22 + float(i) * 0.05, 0.16, [Color("#d66a45"), Color("#7bc7d9"), Color("#d6b85f")][i])
+		planet.position = Vector3(-4.4 + float(i) * 4.1, 1.15 + float(i) * 0.35, 3.7)
+		planet.rotation_degrees = Vector3(90, 0, 0)
+		ocean_root.add_child(planet)
 	_attach_table_area()
 
 func _build_living_room_map() -> void:
@@ -357,6 +376,12 @@ func _build_living_room_map() -> void:
 	var lamp_shade := _box(Vector3(0.42, 0.28, 0.42), Color("#e9c46a"))
 	lamp_shade.position = Vector3(2.8, 0.9, -2.35)
 	ship_root.add_child(lamp_shade)
+	var picture_frame := _box(Vector3(1.05, 0.72, 0.06), Color("#3c2b22"))
+	picture_frame.position = Vector3(-1.15, 1.55, -2.93)
+	ship_root.add_child(picture_frame)
+	var picture_center := _box(Vector3(0.82, 0.52, 0.065), Color("#6aa5d8"))
+	picture_center.position = Vector3(-1.15, 1.55, -2.965)
+	ship_root.add_child(picture_center)
 	var plant_pot := _cylinder(0.22, 0.28, Color("#9b4d2b"))
 	plant_pot.position = Vector3(3.1, 0.05, 2.35)
 	ship_root.add_child(plant_pot)
@@ -390,6 +415,10 @@ func _build_jungle_map() -> void:
 		vine.position = Vector3(-3.2 + float(i) * 1.2, 1.05, -2.8)
 		vine.rotation_degrees.z = sin(float(i)) * 12.0
 		ship_root.add_child(vine)
+	for i in range(9):
+		var flower := _box(Vector3(0.12, 0.04, 0.12), [Color("#f0d28a"), Color("#d86b9b"), Color("#f7f1e3")][i % 3])
+		flower.position = Vector3(-3.2 + float(i % 5) * 1.25, -0.08, 2.4 - float(i / 5) * 0.7)
+		ship_root.add_child(flower)
 	_attach_table_area()
 
 func _build_table() -> void:
@@ -425,6 +454,13 @@ func _build_table() -> void:
 	table_top.material_override = _mat(table_felt_color)
 	table_top.position.y = 0.52
 	ship_root.add_child(table_top)
+
+	for i in range(12):
+		var tick := _box(Vector3(0.045, 0.035, 0.28), table_rail_color.lightened(0.12))
+		var angle := TAU * float(i) / 12.0
+		tick.position = Vector3(cos(angle) * 2.24, 0.59, sin(angle) * 2.24)
+		tick.rotation_degrees.y = -rad_to_deg(angle)
+		ship_root.add_child(tick)
 
 func _build_jolly_roger() -> void:
 	for i in range(5):
@@ -687,9 +723,12 @@ func _animate_seats() -> void:
 			lean = -9.0
 		elif seat == current_active:
 			bounce = absf(sin(time * 3.2)) * 0.06
+		else:
+			bounce = sin(time * 1.4 + float(seat) * 0.7) * 0.018
 		avatar.position = base + Vector3(0, bounce, 0)
 		avatar.rotation.y = seat_base_rotations[seat]
 		avatar.rotation_degrees.x = lean
+		avatar.rotation_degrees.z = sin(time * 1.7 + float(seat)) * (1.8 if seat == current_active else 0.8)
 	_animate_player_hand()
 
 func _animate_player_hand() -> void:
@@ -759,8 +798,16 @@ func _update_camera() -> void:
 func _make_readable_card(card: Dictionary, scale_factor: float) -> Node3D:
 	var root := Node3D.new()
 	root.scale = Vector3.ONE * scale_factor
+	var shadow := _box(Vector3(0.36, 0.012, 0.5), Color(0, 0, 0, 0.32))
+	shadow.name = "Shadow"
+	shadow.position = Vector3(0.018, -0.012, 0.018)
+	root.add_child(shadow)
+	var edge := _box(Vector3(0.36, 0.026, 0.5), Color("#372f28"))
+	edge.name = "Edge"
+	root.add_child(edge)
 	var base := _box(Vector3(0.34, 0.025, 0.48), Color("#f9f4e8"))
 	base.name = "Face"
+	base.position = Vector3(0, 0.006, 0)
 	root.add_child(base)
 	var border := Node3D.new()
 	border.name = "HoverBorder"
@@ -808,7 +855,10 @@ func _set_card_hover_visual(card: Node3D, hovered: bool) -> void:
 	var face := card.get_node_or_null("Face") as MeshInstance3D
 	if not face:
 		return
-	face.material_override = _mat(Color("#fff7c7") if hovered else Color("#f9f4e8"))
+	face.material_override = _mat(Color("#fff3a8") if hovered else Color("#f9f4e8"))
+	var shadow := card.get_node_or_null("Shadow") as MeshInstance3D
+	if shadow:
+		shadow.visible = not hovered
 	var border := card.get_node_or_null("HoverBorder") as Node3D
 	if border:
 		border.visible = hovered
