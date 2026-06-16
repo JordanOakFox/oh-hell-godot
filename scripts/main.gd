@@ -3,6 +3,13 @@ extends Control
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
 const DEFAULT_MAX_CARDS := 7
 const DEFAULT_PLAYERS := 4
+const MAP_IDS := ["pirate", "space", "living_room", "jungle"]
+const MAP_NAMES := {
+	"pirate": "Pirate Ship",
+	"space": "In Space",
+	"living_room": "Living Room",
+	"jungle": "Jungle",
+}
 
 const CardButtonScript := preload("res://scripts/card_button.gd")
 const FeltBackgroundScript := preload("res://scripts/felt_background.gd")
@@ -23,6 +30,7 @@ var my_seat := 0
 var seat_peers: Array = []
 var lobby_player_count := DEFAULT_PLAYERS
 var lobby_max_cards := DEFAULT_MAX_CARDS
+var lobby_map_index := 0
 var local_player_name := "Player"
 var local_profile_id := ""
 var recorded_game_ids := {}
@@ -36,6 +44,10 @@ var title_label: Label
 var status_label: Label
 var table_label: Label
 var left_stats_label: Label
+var net_row: HBoxContainer
+var settings_row: HBoxContainer
+var map_row: HBoxContainer
+var map_name_label: Label
 var right_info_panel: VBoxContainer
 var right_info_label: Label
 var trump_symbol_label: Label
@@ -114,7 +126,7 @@ func _build_ui() -> void:
 	title_label.add_theme_color_override("font_color", Color("#f0d28a"))
 	root.add_child(title_label)
 
-	var net_row := HBoxContainer.new()
+	net_row = HBoxContainer.new()
 	net_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(net_row)
 
@@ -151,7 +163,7 @@ func _build_ui() -> void:
 	join_found_button.pressed.connect(_on_join_found_pressed)
 	net_row.add_child(join_found_button)
 
-	var settings_row := HBoxContainer.new()
+	settings_row = HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(settings_row)
 
@@ -182,6 +194,34 @@ func _build_ui() -> void:
 	max_cards_spin.custom_minimum_size = Vector2(72, 0)
 	max_cards_spin.value_changed.connect(_on_max_cards_changed)
 	settings_row.add_child(max_cards_spin)
+
+	map_row = HBoxContainer.new()
+	map_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	map_row.add_theme_constant_override("separation", 8)
+	root.add_child(map_row)
+
+	var map_left_button := Button.new()
+	map_left_button.text = "<"
+	map_left_button.pressed.connect(_on_previous_map_pressed)
+	map_row.add_child(map_left_button)
+
+	var map_title_label := Label.new()
+	map_title_label.text = "Map"
+	map_title_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	map_row.add_child(map_title_label)
+
+	map_name_label = Label.new()
+	map_name_label.text = _selected_map_name()
+	map_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	map_name_label.add_theme_font_size_override("font_size", 18)
+	map_name_label.add_theme_color_override("font_color", Color("#f0d28a"))
+	map_name_label.custom_minimum_size = Vector2(180, 0)
+	map_row.add_child(map_name_label)
+
+	var map_right_button := Button.new()
+	map_right_button.text = ">"
+	map_right_button.pressed.connect(_on_next_map_pressed)
+	map_row.add_child(map_right_button)
 
 	status_label = Label.new()
 	status_label.text = Profile.stats_line()
@@ -310,6 +350,7 @@ func _create_offline_lobby() -> void:
 func _create_client_waiting_view() -> void:
 	view_state = {
 		"phase": "connecting",
+		"map_id": _selected_map_id(),
 		"names": _default_names(lobby_player_count),
 		"profiles": _default_profiles(lobby_player_count),
 		"num_players": lobby_player_count,
@@ -344,6 +385,7 @@ func _create_lobby(message: String) -> void:
 	profiles[0] = Profile.public_profile()
 	state = {
 		"phase": "lobby",
+		"map_id": _selected_map_id(),
 		"names": names,
 		"profiles": profiles,
 		"num_players": lobby_player_count,
@@ -377,9 +419,11 @@ func _create_lobby(message: String) -> void:
 func _start_match(names: Array, max_cards: int) -> void:
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
 		return
+	var selected_map := str(state.get("map_id", _selected_map_id()))
 
 	state = {
 		"phase": "bidding",
+		"map_id": selected_map,
 		"names": names,
 		"profiles": state["profiles"].duplicate(true),
 		"num_players": names.size(),
@@ -476,8 +520,20 @@ func _bidding_message() -> String:
 func _render() -> void:
 	if view_state.is_empty():
 		return
+	lobby_map_index = _map_index_for_id(str(view_state.get("map_id", _selected_map_id())))
+	if map_name_label:
+		map_name_label.text = _selected_map_name()
+	var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
 	if title_label:
 		title_label.visible = view_state.get("phase", "") in ["connecting", "lobby", "game_end"]
+	if net_row:
+		net_row.visible = not active_game
+	if settings_row:
+		settings_row.visible = not active_game
+	if map_row:
+		map_row.visible = not active_game
+	if status_label:
+		status_label.visible = not active_game
 	if table_view_3d:
 		table_view_3d.set_table_state(view_state, my_seat)
 		table_view_3d.set_player_hand(local_hand)
@@ -579,6 +635,8 @@ func _discovery_info() -> Dictionary:
 		"players": connected_count,
 		"max_players": lobby_player_count,
 		"max_cards": lobby_max_cards,
+		"map_id": _selected_map_id(),
+		"map_name": _selected_map_name(),
 		"phase": state.get("phase", "lobby"),
 	}
 
@@ -587,6 +645,7 @@ func _render_lobby() -> void:
 	right_info_label.text = ""
 	var text := "Multiplayer Lobby\n\n"
 	text += "Table: %d players, %d max cards\n" % [view_state["num_players"], view_state["max_cards"]]
+	text += "Map: %s\n" % MAP_NAMES.get(str(view_state.get("map_id", _selected_map_id())), _selected_map_name())
 	text += "You are seat %d: %s\n\n" % [my_seat + 1, view_state["names"][my_seat]]
 	if multiplayer.multiplayer_peer and multiplayer.is_server():
 		var addresses := Net.local_join_addresses()
@@ -849,6 +908,38 @@ func _play_again_count() -> int:
 		if voted:
 			count += 1
 	return count
+
+func _selected_map_id() -> String:
+	return MAP_IDS[lobby_map_index % MAP_IDS.size()]
+
+func _selected_map_name() -> String:
+	var map_id := _selected_map_id()
+	return str(MAP_NAMES.get(map_id, map_id))
+
+func _map_index_for_id(map_id: String) -> int:
+	var index := MAP_IDS.find(map_id)
+	return 0 if index == -1 else index
+
+func _on_previous_map_pressed() -> void:
+	_change_lobby_map(-1)
+
+func _on_next_map_pressed() -> void:
+	_change_lobby_map(1)
+
+func _change_lobby_map(direction: int) -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_set_status("Host chooses the map.")
+		return
+	lobby_map_index = posmod(lobby_map_index + direction, MAP_IDS.size())
+	if map_name_label:
+		map_name_label.text = _selected_map_name()
+	if state.has("map_id") and state.get("phase", "") == "lobby":
+		state["map_id"] = _selected_map_id()
+		_publish_state()
+		if multiplayer.multiplayer_peer and multiplayer.is_server():
+			Net.update_advertisement(_discovery_info())
+	elif not multiplayer.multiplayer_peer:
+		_create_offline_lobby()
 
 func _read_lobby_inputs() -> void:
 	local_player_name = name_input.text.strip_edges()
@@ -1396,10 +1487,12 @@ func _return_to_lobby_after_game() -> void:
 func _return_to_lobby(message: String) -> void:
 	lobby_player_count = state["num_players"]
 	lobby_max_cards = state["max_cards"]
+	lobby_map_index = _map_index_for_id(str(state.get("map_id", _selected_map_id())))
 	var names: Array = state["names"].duplicate(true)
 	var profiles: Array = state["profiles"].duplicate(true)
 	state = {
 		"phase": "lobby",
+		"map_id": _selected_map_id(),
 		"names": names,
 		"profiles": profiles,
 		"num_players": lobby_player_count,

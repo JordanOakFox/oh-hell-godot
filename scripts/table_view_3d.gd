@@ -24,6 +24,7 @@ const RANK_NAMES := {11: "J", 12: "Q", 13: "K", 14: "A"}
 
 var viewport: SubViewport
 var camera: Camera3D
+var world_environment: WorldEnvironment
 var world_root: Node3D
 var ocean_root: Node3D
 var ship_root: Node3D
@@ -47,6 +48,9 @@ var look_yaw := 0.0
 var look_pitch := -10.0
 var hand_signature := ""
 var hovered_hand_index := -1
+var current_map_id := "pirate"
+var table_felt_color := Color("#0b5a3f")
+var table_rail_color := Color("#7a4a28")
 var time := 0.0
 
 func _ready() -> void:
@@ -70,9 +74,10 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	time += delta
 	if ship_root:
-		ship_root.position.y = sin(time * 1.35) * 0.06
-		ship_root.rotation_degrees.z = sin(time * 0.9) * 1.6
-		ship_root.rotation_degrees.x = cos(time * 0.7) * 1.1
+		var bob_strength := 0.06 if current_map_id == "pirate" else 0.018
+		ship_root.position.y = sin(time * 1.35) * bob_strength
+		ship_root.rotation_degrees.z = sin(time * 0.9) * (1.6 if current_map_id == "pirate" else 0.25)
+		ship_root.rotation_degrees.x = cos(time * 0.7) * (1.1 if current_map_id == "pirate" else 0.18)
 	_animate_waves()
 	_animate_flag()
 	_animate_seats()
@@ -98,6 +103,9 @@ func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	var players := int(table_state.get("num_players", 0))
 	if players <= 0:
 		return
+	var map_id := str(table_state.get("map_id", "pirate"))
+	if map_id != current_map_id:
+		_rebuild_map(map_id)
 	if players != seat_count:
 		_rebuild_seats(players)
 	local_seat = clampi(my_seat, 0, max(players - 1, 0))
@@ -192,15 +200,48 @@ func _build_world() -> void:
 	env.ambient_light_color = Color("#c3e1df")
 	env.ambient_light_energy = 0.95
 	ambient.environment = env
+	world_environment = ambient
 	world_root.add_child(ambient)
+
+	hand_root = Node3D.new()
+	camera.add_child(hand_root)
+	_rebuild_map(current_map_id)
+
+func _rebuild_map(map_id: String) -> void:
+	if not ["pirate", "space", "living_room", "jungle"].has(map_id):
+		map_id = "pirate"
+	current_map_id = map_id
+	if ocean_root:
+		ocean_root.queue_free()
+	if ship_root:
+		ship_root.queue_free()
+	wave_strips.clear()
+	flag_strips.clear()
+	seats.clear()
+	seat_base_positions.clear()
+	seat_base_rotations.clear()
+	seat_moods.clear()
+	seat_count = 0
 
 	ocean_root = Node3D.new()
 	world_root.add_child(ocean_root)
-	_build_ocean()
-
 	ship_root = Node3D.new()
 	world_root.add_child(ship_root)
-	_build_ship()
+
+	if current_map_id == "space":
+		_build_space_map()
+	elif current_map_id == "living_room":
+		_build_living_room_map()
+	elif current_map_id == "jungle":
+		_build_jungle_map()
+	else:
+		_build_pirate_map()
+
+func _set_world_colors(background: Color, ambient_color: Color, ambient_energy: float) -> void:
+	if world_environment and world_environment.environment:
+		world_environment.environment.background_color = background
+		world_environment.environment.ambient_light_color = ambient_color
+		world_environment.environment.ambient_light_energy = ambient_energy
 
 func _build_ocean() -> void:
 	var sea := MeshInstance3D.new()
@@ -217,7 +258,12 @@ func _build_ocean() -> void:
 		ocean_root.add_child(wave)
 		wave_strips.append(wave)
 
-func _build_ship() -> void:
+func _build_pirate_map() -> void:
+	table_felt_color = Color("#0b5a3f")
+	table_rail_color = Color("#7a4a28")
+	_set_world_colors(Color("#5aa7b9"), Color("#c3e1df"), 0.95)
+	_build_ocean()
+
 	var deck := _box(Vector3(6.5, 0.22, 4.1), Color("#8b552f"))
 	deck.position = Vector3(0, -0.08, 0)
 	ship_root.add_child(deck)
@@ -253,14 +299,98 @@ func _build_ship() -> void:
 	ship_root.add_child(flag_root)
 	_build_jolly_roger()
 
+	_attach_table_area()
+
+func _attach_table_area() -> void:
 	_build_table()
 
 	seat_root = Node3D.new()
 	ship_root.add_child(seat_root)
 	trick_root = Node3D.new()
 	ship_root.add_child(trick_root)
-	hand_root = Node3D.new()
-	camera.add_child(hand_root)
+
+func _build_space_map() -> void:
+	table_felt_color = Color("#15204f")
+	table_rail_color = Color("#6fd3ff")
+	_set_world_colors(Color("#070a1d"), Color("#6e84c8"), 0.7)
+	var platform := _cylinder(3.9, 0.22, Color("#1a2142"))
+	platform.position = Vector3(0, -0.08, 0)
+	ship_root.add_child(platform)
+	var ring := _cylinder(4.15, 0.08, Color("#334b8f"))
+	ring.position = Vector3(0, 0.08, 0)
+	ship_root.add_child(ring)
+	for i in range(34):
+		var star := _box(Vector3(0.035, 0.035, 0.035), Color("#f5f0c7"))
+		var angle := float(i) * 1.91
+		var radius := 5.0 + float(i % 7) * 0.7
+		star.position = Vector3(cos(angle) * radius, 0.7 + float(i % 5) * 0.42, sin(angle) * radius)
+		ocean_root.add_child(star)
+	for i in range(5):
+		var panel := _box(Vector3(0.55, 0.08, 0.18), Color("#6fd3ff"))
+		panel.position = Vector3(-1.1 + float(i) * 0.55, 0.18, -3.0)
+		ship_root.add_child(panel)
+	_attach_table_area()
+
+func _build_living_room_map() -> void:
+	table_felt_color = Color("#256045")
+	table_rail_color = Color("#7c5637")
+	_set_world_colors(Color("#b98d66"), Color("#f0d4a8"), 1.05)
+	var floor := _box(Vector3(8.2, 0.12, 6.2), Color("#9a6a3f"))
+	floor.position = Vector3(0, -0.18, 0)
+	ship_root.add_child(floor)
+	var back_wall := _box(Vector3(8.2, 3.2, 0.16), Color("#8f6948"))
+	back_wall.position = Vector3(0, 1.25, -3.05)
+	ship_root.add_child(back_wall)
+	var side_wall := _box(Vector3(0.16, 3.2, 6.2), Color("#7d5a40"))
+	side_wall.position = Vector3(-4.05, 1.25, 0)
+	ship_root.add_child(side_wall)
+	for i in range(5):
+		var plank := _box(Vector3(0.035, 0.018, 6.0), Color("#6e492d"))
+		plank.position = Vector3(-2.8 + float(i) * 1.4, -0.1, 0)
+		ship_root.add_child(plank)
+	var couch := _box(Vector3(1.55, 0.46, 0.55), Color("#7c4055"))
+	couch.position = Vector3(-2.35, 0.25, -2.35)
+	ship_root.add_child(couch)
+	var lamp_stand := _cylinder(0.035, 0.9, Color("#3b2b21"))
+	lamp_stand.position = Vector3(2.8, 0.36, -2.35)
+	ship_root.add_child(lamp_stand)
+	var lamp_shade := _box(Vector3(0.42, 0.28, 0.42), Color("#e9c46a"))
+	lamp_shade.position = Vector3(2.8, 0.9, -2.35)
+	ship_root.add_child(lamp_shade)
+	var plant_pot := _cylinder(0.22, 0.28, Color("#9b4d2b"))
+	plant_pot.position = Vector3(3.1, 0.05, 2.35)
+	ship_root.add_child(plant_pot)
+	for i in range(4):
+		var leaf := _box(Vector3(0.12, 0.5, 0.04), Color("#2e8b57"))
+		leaf.position = Vector3(3.1, 0.45, 2.35)
+		leaf.rotation_degrees = Vector3(20, float(i) * 90.0, 26)
+		ship_root.add_child(leaf)
+	_attach_table_area()
+
+func _build_jungle_map() -> void:
+	table_felt_color = Color("#1d6b34")
+	table_rail_color = Color("#6a4423")
+	_set_world_colors(Color("#4a8f6b"), Color("#a7d68d"), 1.0)
+	var ground := _box(Vector3(8.5, 0.14, 6.4), Color("#287347"))
+	ground.position = Vector3(0, -0.2, 0)
+	ship_root.add_child(ground)
+	for i in range(10):
+		var angle := TAU * float(i) / 10.0
+		var radius := 3.7 + float(i % 3) * 0.35
+		var trunk := _cylinder(0.11, 1.8 + float(i % 2) * 0.35, Color("#6a4423"))
+		trunk.position = Vector3(cos(angle) * radius, 0.65, sin(angle) * radius)
+		ship_root.add_child(trunk)
+		for leaf_index in range(3):
+			var leaf := _box(Vector3(0.72, 0.18, 0.28), Color("#1f8f46"))
+			leaf.position = trunk.position + Vector3(0, 1.0 + float(leaf_index) * 0.14, 0)
+			leaf.rotation_degrees = Vector3(0, rad_to_deg(angle) + leaf_index * 58, 20)
+			ship_root.add_child(leaf)
+	for i in range(6):
+		var vine := _box(Vector3(0.045, 1.2, 0.045), Color("#2c6f2f"))
+		vine.position = Vector3(-3.2 + float(i) * 1.2, 1.05, -2.8)
+		vine.rotation_degrees.z = sin(float(i)) * 12.0
+		ship_root.add_child(vine)
+	_attach_table_area()
 
 func _build_table() -> void:
 	var table := MeshInstance3D.new()
@@ -270,7 +400,7 @@ func _build_table() -> void:
 	table_mesh.height = 0.28
 	table_mesh.radial_segments = 16
 	table.mesh = table_mesh
-	table.material_override = _mat(Color("#0b5a3f"))
+	table.material_override = _mat(table_felt_color)
 	table.position.y = 0.2
 	ship_root.add_child(table)
 
@@ -281,7 +411,7 @@ func _build_table() -> void:
 	rail_mesh.height = 0.12
 	rail_mesh.radial_segments = 16
 	rail.mesh = rail_mesh
-	rail.material_override = _mat(Color("#7a4a28"))
+	rail.material_override = _mat(table_rail_color)
 	rail.position.y = 0.44
 	ship_root.add_child(rail)
 
@@ -292,7 +422,7 @@ func _build_table() -> void:
 	top_mesh.height = 0.08
 	top_mesh.radial_segments = 16
 	table_top.mesh = top_mesh
-	table_top.material_override = _mat(Color("#0b5a3f"))
+	table_top.material_override = _mat(table_felt_color)
 	table_top.position.y = 0.52
 	ship_root.add_child(table_top)
 
