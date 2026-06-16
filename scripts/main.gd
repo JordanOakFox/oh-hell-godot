@@ -38,6 +38,7 @@ var rng := RandomNumberGenerator.new()
 var last_hand_signature := ""
 var last_shuffle_round_key := ""
 var bot_action_key := ""
+var bot_turn_serial := 0
 var hovered_3d_card_index := -1
 var dedicated_server := false
 
@@ -551,6 +552,7 @@ func _begin_round() -> void:
 	state["active_player"] = -1
 	state["phase"] = "bidding"
 	state["message"] = "Choose your secret bid."
+	_advance_bot_turn_serial()
 	_publish_state()
 	_schedule_bot_action()
 
@@ -1257,6 +1259,7 @@ func _apply_bid(seat: int, amount: int) -> void:
 		state["phase"] = "playing"
 		state["active_player"] = state["leader"]
 		state["message"] = "%s leads." % state["names"][state["leader"]]
+		_advance_bot_turn_serial()
 	else:
 		state["message"] = _bidding_message()
 	_publish_state()
@@ -1301,6 +1304,7 @@ func _apply_card(seat: int, card: Dictionary) -> void:
 	else:
 		state["active_player"] = (seat + 1) % state["num_players"]
 		state["message"] = "%s, play a card." % state["names"][state["active_player"]]
+		_advance_bot_turn_serial()
 	_publish_state()
 	_schedule_bot_action()
 
@@ -1343,8 +1347,13 @@ func _continue_after_trick() -> void:
 		state["phase"] = "playing"
 		state["active_player"] = state["leader"]
 		state["message"] = "%s leads." % state["names"][state["leader"]]
+		_advance_bot_turn_serial()
 	_publish_state()
 	_schedule_bot_action()
+
+func _advance_bot_turn_serial() -> void:
+	bot_turn_serial += 1
+	bot_action_key = ""
 
 func _request_next_round() -> void:
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
@@ -1380,7 +1389,7 @@ func _schedule_bot_action() -> void:
 			_queue_bot_card(seat)
 
 func _queue_bot_bid(seat: int) -> void:
-	var key := "bid:%d:%d" % [int(state["round_index"]), seat]
+	var key := "bid:%d:%d:%d" % [bot_turn_serial, int(state["round_index"]), seat]
 	if bot_action_key == key:
 		return
 	bot_action_key = key
@@ -1392,7 +1401,7 @@ func _queue_bot_bid(seat: int) -> void:
 	_apply_bid(seat, _bot_choose_bid(seat))
 
 func _queue_bot_card(seat: int) -> void:
-	var key := "card:%d:%d:%d" % [int(state["round_index"]), state["trick"].size(), seat]
+	var key := "card:%d:%d:%d:%d" % [bot_turn_serial, int(state["round_index"]), state["trick"].size(), seat]
 	if bot_action_key == key:
 		return
 	bot_action_key = key
