@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.9"
+const GAME_VERSION := "0.2.10"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -147,6 +147,9 @@ func _ready() -> void:
 	_apply_command_line_mode()
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
+		_toggle_mute_shortcut()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_I:
 		_request_hidden_emote()
 		return
@@ -687,8 +690,12 @@ func _sync_rules_visibility() -> void:
 		rules_panel.visible = rules_visible and not active_game
 
 func _on_mute_pressed() -> void:
+	_toggle_mute_shortcut()
+
+func _toggle_mute_shortcut() -> void:
 	Profile.set_music_muted(not Profile.music_muted())
 	_apply_audio_settings()
+	_play_sfx("click")
 
 func _on_music_volume_changed(value: float) -> void:
 	Profile.set_music_volume(value / 100.0)
