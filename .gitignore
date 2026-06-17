@@ -5,6 +5,7 @@
 exports/
 builds/
 build_tools/
+backups/
 *.pck
 *.zip
 

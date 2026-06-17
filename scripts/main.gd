@@ -46,12 +46,14 @@ var dedicated_server := false
 var title_label: Label
 var status_label: Label
 var table_label: Label
+var player_hud_panel: PanelContainer
 var left_stats_label: Label
 var net_row: HBoxContainer
 var settings_row: HBoxContainer
 var map_row: HBoxContainer
 var map_name_label: Label
 var right_info_panel: VBoxContainer
+var right_info_frame: PanelContainer
 var right_info_label: Label
 var trump_card_panel: PanelContainer
 var trump_card_rank_label: Label
@@ -239,21 +241,30 @@ func _build_ui() -> void:
 	play_row.add_theme_constant_override("separation", 16)
 	root.add_child(play_row)
 
+	player_hud_panel = PanelContainer.new()
+	player_hud_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	player_hud_panel.offset_left = 18
+	player_hud_panel.offset_top = -92
+	player_hud_panel.offset_right = 248
+	player_hud_panel.offset_bottom = -18
+	player_hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	player_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color("#16251fd8"), Color("#f0d28a66"), 8, 1))
+	player_hud_panel.visible = false
+	add_child(player_hud_panel)
+
+	var player_hud_margin := MarginContainer.new()
+	player_hud_margin.add_theme_constant_override("margin_left", 12)
+	player_hud_margin.add_theme_constant_override("margin_top", 9)
+	player_hud_margin.add_theme_constant_override("margin_right", 12)
+	player_hud_margin.add_theme_constant_override("margin_bottom", 9)
+	player_hud_panel.add_child(player_hud_margin)
+
 	left_stats_label = Label.new()
 	left_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	left_stats_label.add_theme_font_size_override("font_size", 15)
+	left_stats_label.add_theme_font_size_override("font_size", 14)
 	left_stats_label.add_theme_color_override("font_color", Color("#f7f1e3"))
-	left_stats_label.add_theme_color_override("font_shadow_color", Color("#17110c"))
-	left_stats_label.add_theme_constant_override("shadow_offset_x", 2)
-	left_stats_label.add_theme_constant_override("shadow_offset_y", 2)
-	left_stats_label.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	left_stats_label.offset_left = 18
-	left_stats_label.offset_top = -82
-	left_stats_label.offset_right = 258
-	left_stats_label.offset_bottom = -18
 	left_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	left_stats_label.visible = false
-	add_child(left_stats_label)
+	player_hud_margin.add_child(left_stats_label)
 
 	var center_column := VBoxContainer.new()
 	center_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -266,6 +277,9 @@ func _build_ui() -> void:
 	table_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	table_label.add_theme_font_size_override("font_size", 18)
 	table_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	table_label.add_theme_color_override("font_shadow_color", Color("#17110c"))
+	table_label.add_theme_constant_override("shadow_offset_x", 2)
+	table_label.add_theme_constant_override("shadow_offset_y", 2)
 	table_label.clip_text = true
 	table_label.custom_minimum_size = Vector2(0, 68)
 	center_column.add_child(table_label)
@@ -282,11 +296,24 @@ func _build_ui() -> void:
 	action_box.add_theme_constant_override("separation", 8)
 	center_column.add_child(action_box)
 
+	right_info_frame = PanelContainer.new()
+	right_info_frame.custom_minimum_size = Vector2(230, 0)
+	right_info_frame.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	right_info_frame.add_theme_stylebox_override("panel", _panel_style(Color("#16251fcc"), Color("#f0d28a55"), 8, 1))
+	play_row.add_child(right_info_frame)
+
+	var right_info_margin := MarginContainer.new()
+	right_info_margin.add_theme_constant_override("margin_left", 14)
+	right_info_margin.add_theme_constant_override("margin_top", 12)
+	right_info_margin.add_theme_constant_override("margin_right", 14)
+	right_info_margin.add_theme_constant_override("margin_bottom", 12)
+	right_info_frame.add_child(right_info_margin)
+
 	right_info_panel = VBoxContainer.new()
-	right_info_panel.custom_minimum_size = Vector2(240, 0)
+	right_info_panel.custom_minimum_size = Vector2(190, 0)
 	right_info_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right_info_panel.add_theme_constant_override("separation", 12)
-	play_row.add_child(right_info_panel)
+	right_info_margin.add_child(right_info_panel)
 
 	right_info_label = Label.new()
 	right_info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -345,6 +372,17 @@ func _build_ui() -> void:
 	hand_box.custom_minimum_size = Vector2(0, 178)
 	hand_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.add_child(hand_box)
+
+func _panel_style(fill: Color, border: Color, radius: int, border_width: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(border_width)
+	style.set_corner_radius_all(radius)
+	style.shadow_color = Color("#00000055")
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 3)
+	return style
 
 func _on_host_pressed() -> void:
 	_read_lobby_inputs()
@@ -643,8 +681,8 @@ func _render() -> void:
 		table_label.add_theme_font_size_override("font_size", 18)
 		trick_box.visible = true
 		hand_box.visible = true
-		left_stats_label.visible = false
-		right_info_panel.visible = false
+		player_hud_panel.visible = false
+		right_info_frame.visible = false
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		table_label.text = view_state["message"]
@@ -655,8 +693,8 @@ func _render() -> void:
 	if view_state["phase"] == "lobby":
 		trick_box.visible = false
 		hand_box.visible = false
-		left_stats_label.visible = false
-		right_info_panel.visible = false
+		player_hud_panel.visible = false
+		right_info_frame.visible = false
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		_render_lobby()
@@ -665,23 +703,23 @@ func _render() -> void:
 		table_label.add_theme_font_size_override("font_size", 18)
 		trick_box.visible = true
 		hand_box.visible = true
-		left_stats_label.visible = false
-		right_info_panel.visible = false
+		player_hud_panel.visible = false
+		right_info_frame.visible = false
 		_render_game_end()
 		return
 
 	trick_box.visible = true
 	hand_box.visible = true
-	left_stats_label.visible = true
-	right_info_panel.visible = true
+	player_hud_panel.visible = true
+	right_info_frame.visible = true
 	table_label.add_theme_font_size_override("font_size", 18)
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
-	right_info_label.text = "Round %d / %d\nCards: %d\n\nTrump" % [
+	right_info_label.text = "ROUND %d / %d\nCards: %d\n\nTRUMP" % [
 		view_state["round_index"] + 1,
 		view_state["sequence"].size(),
 		round_size,
 	]
-	seat_info_label.text = "\nYou are seat %d\n%s" % [
+	seat_info_label.text = "Seat %d\n%s" % [
 		my_seat + 1,
 		view_state["names"][my_seat],
 	]
@@ -691,7 +729,7 @@ func _render() -> void:
 		my_bid_text = "in" if view_state["bid_submitted"][my_seat] else "..."
 	elif view_state["bids"][my_seat] != null:
 		my_bid_text = str(view_state["bids"][my_seat])
-	left_stats_label.text = "You: %d pts\nBid %s | Tricks %d" % [
+	left_stats_label.text = "YOU\n%d pts\nBid %s   Tricks %d" % [
 		view_state["scores"][my_seat],
 		my_bid_text,
 		view_state["tricks_won"][my_seat],

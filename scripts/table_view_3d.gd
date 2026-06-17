@@ -552,25 +552,25 @@ func _make_avatar(seat: int) -> Node3D:
 	var name_label := Label3D.new()
 	name_label.name = "Name"
 	name_label.text = "P%d" % (seat + 1)
-	name_label.font_size = 28
+	name_label.font_size = 20
 	name_label.modulate = Color("#f9f4e8")
-	name_label.outline_size = 6
+	name_label.outline_size = 4
 	name_label.outline_modulate = Color("#17110c")
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	name_label.no_depth_test = true
-	name_label.position = Vector3(0, 1.5, 0)
+	name_label.position = Vector3(0, 1.42, 0)
 	root.add_child(name_label)
 
 	var score_label := Label3D.new()
 	score_label.name = "Score"
-	score_label.text = "0 pts | bid ... | tricks 0"
-	score_label.font_size = 20
-	score_label.modulate = Color("#f7f1e3")
-	score_label.outline_size = 5
+	score_label.text = "0p  b-  t0"
+	score_label.font_size = 14
+	score_label.modulate = Color("#d8d2c2")
+	score_label.outline_size = 3
 	score_label.outline_modulate = Color("#17110c")
 	score_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	score_label.no_depth_test = true
-	score_label.position = Vector3(0, 1.73, 0)
+	score_label.position = Vector3(0, 1.56, 0)
 	root.add_child(score_label)
 
 	var trick_pile := Node3D.new()
@@ -607,7 +607,7 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 		var score_label := avatar.get_node_or_null("Score") as Label3D
 		if score_label:
 			score_label.text = _seat_score_text(seat, phase, scores, bids, submitted_bids, tricks)
-			score_label.modulate = Color("#f0d28a") if seat == current_active else Color("#f7f1e3")
+			score_label.modulate = Color("#f0d28a") if seat == current_active else Color("#d8d2c2")
 		var trick_pile := avatar.get_node_or_null("TrickPile") as Node3D
 		if trick_pile:
 			var pile_count := 0
@@ -638,7 +638,7 @@ func _seat_score_text(seat: int, phase: String, scores: Array, bids: Array, subm
 		bid_text = "in" if seat < submitted_bids.size() and bool(submitted_bids[seat]) else "..."
 	elif seat < bids.size() and bids[seat] != null:
 		bid_text = str(bids[seat])
-	return "%d pts | bid %s | tricks %d" % [points, bid_text, trick_count]
+	return "%dp  b%s  t%d" % [points, bid_text, trick_count]
 
 func _update_trick_pile(pile: Node3D, trick_count: int) -> void:
 	for child in pile.get_children():
