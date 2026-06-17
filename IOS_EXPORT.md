@@ -35,6 +35,7 @@ If the repo is somewhere else, use that folder instead.
    - Name: `iOS`
    - Bundle Identifier: `com.jordanoakfox.ohhell`
    - App Store Team ID: your Apple team ID from Xcode
+   - Icon: `res://assets/icons/app_icon.png`
    - Export Filter: `Export all resources in the project`
    - Texture format: leave ASTC/ETC2 enabled if available
 7. Export to a new empty folder, for example `~/Desktop/OhHellIOS`.
