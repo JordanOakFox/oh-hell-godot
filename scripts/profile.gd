@@ -2,6 +2,7 @@ extends Node
 
 const SAVE_PATH := "user://profile.json"
 const ANIMALS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
+const BOT_PERSONALITIES := ["casual", "smart", "ruthless"]
 
 var data: Dictionary = {}
 
@@ -80,6 +81,21 @@ func set_music_muted(muted: bool) -> void:
 	data["music_muted"] = muted
 	save_profile()
 
+func sfx_volume() -> float:
+	return clampf(float(data.get("sfx_volume", 0.75)), 0.0, 1.0)
+
+func set_sfx_volume(value: float) -> void:
+	data["sfx_volume"] = clampf(value, 0.0, 1.0)
+	save_profile()
+
+func bot_personality() -> String:
+	var selected := str(data.get("bot_personality", "smart"))
+	return selected if BOT_PERSONALITIES.has(selected) else "smart"
+
+func set_bot_personality(value: String) -> void:
+	data["bot_personality"] = value if BOT_PERSONALITIES.has(value) else "smart"
+	save_profile()
+
 func animal() -> String:
 	var selected := str(data.get("animal", "fox"))
 	return selected if ANIMALS.has(selected) else "fox"
@@ -95,6 +111,8 @@ func _default_profile() -> Dictionary:
 		"animal": "fox",
 		"music_volume": 0.7,
 		"music_muted": false,
+		"sfx_volume": 0.75,
+		"bot_personality": "smart",
 		"games_played": 0,
 		"wins": 0,
 		"total_score": 0,

@@ -1,8 +1,14 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.7"
+const GAME_VERSION := "0.2.8"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
+const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
+const BOT_PERSONALITY_NAMES := {
+	"casual": "Casual",
+	"smart": "Smart",
+	"ruthless": "Ruthless",
+}
 const ANIMAL_NAMES := {
 	"bunny": "Bunny",
 	"lizard": "Lizard",
@@ -71,6 +77,8 @@ var dedicated_server := false
 var version_warning := ""
 var advanced_network_visible := false
 var settings_visible := false
+var rules_visible := false
+var last_sound_serial := 0
 
 var title_label: Label
 var version_label: Label
@@ -83,10 +91,15 @@ var advanced_net_row: HBoxContainer
 var advanced_network_button: Button
 var mute_button: Button
 var settings_button: Button
+var rules_button: Button
 var settings_panel: PanelContainer
 var music_volume_slider: HSlider
 var music_volume_label: Label
+var sfx_volume_slider: HSlider
+var sfx_volume_label: Label
 var animal_picker: OptionButton
+var bot_personality_picker: OptionButton
+var rules_panel: PanelContainer
 var settings_row: HBoxContainer
 var map_row: HBoxContainer
 var map_name_label: Label
@@ -111,7 +124,9 @@ var discovered_games: Array = []
 var fireworks_overlay: Control
 var table_view_3d: Control
 var music_player: AudioStreamPlayer
+var sfx_player: AudioStreamPlayer
 var music_streams := {}
+var sfx_streams := {}
 var current_music_key := ""
 
 func _ready() -> void:
@@ -172,6 +187,10 @@ func _build_ui() -> void:
 	music_player.bus = "Master"
 	add_child(music_player)
 	_apply_audio_settings()
+
+	sfx_player = AudioStreamPlayer.new()
+	sfx_player.bus = "Master"
+	add_child(sfx_player)
 
 	fireworks_overlay = FireworksOverlayScript.new()
 	fireworks_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -238,6 +257,11 @@ func _build_ui() -> void:
 	settings_button.text = "Settings"
 	settings_button.pressed.connect(_on_settings_pressed)
 	net_row.add_child(settings_button)
+
+	rules_button = Button.new()
+	rules_button.text = "Rules"
+	rules_button.pressed.connect(_on_rules_pressed)
+	net_row.add_child(rules_button)
 
 	advanced_net_row = HBoxContainer.new()
 	advanced_net_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -307,6 +331,18 @@ func _build_ui() -> void:
 	music_volume_slider.value_changed.connect(_on_music_volume_changed)
 	settings_box.add_child(music_volume_slider)
 
+	sfx_volume_label = Label.new()
+	sfx_volume_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	settings_box.add_child(sfx_volume_label)
+
+	sfx_volume_slider = HSlider.new()
+	sfx_volume_slider.min_value = 0.0
+	sfx_volume_slider.max_value = 100.0
+	sfx_volume_slider.step = 1.0
+	sfx_volume_slider.value = Profile.sfx_volume() * 100.0
+	sfx_volume_slider.value_changed.connect(_on_sfx_volume_changed)
+	settings_box.add_child(sfx_volume_slider)
+
 	var animal_label := Label.new()
 	animal_label.text = "Animal"
 	animal_label.add_theme_color_override("font_color", Color("#f7f1e3"))
@@ -320,7 +356,41 @@ func _build_ui() -> void:
 	animal_picker.item_selected.connect(_on_animal_selected)
 	settings_box.add_child(animal_picker)
 
+	var bot_label := Label.new()
+	bot_label.text = "Bot Style"
+	bot_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	settings_box.add_child(bot_label)
+
+	bot_personality_picker = OptionButton.new()
+	for bot_id in BOT_PERSONALITY_IDS:
+		bot_personality_picker.add_item(str(BOT_PERSONALITY_NAMES.get(bot_id, bot_id.capitalize())))
+		bot_personality_picker.set_item_metadata(bot_personality_picker.item_count - 1, bot_id)
+	bot_personality_picker.selected = max(BOT_PERSONALITY_IDS.find(Profile.bot_personality()), 0)
+	bot_personality_picker.item_selected.connect(_on_bot_personality_selected)
+	settings_box.add_child(bot_personality_picker)
+
 	_update_audio_labels()
+
+	rules_panel = PanelContainer.new()
+	rules_panel.visible = false
+	rules_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	rules_panel.add_theme_stylebox_override("panel", _panel_style(Color("#16251ff0"), Color("#f0d28a66"), 8, 1))
+	root.add_child(rules_panel)
+
+	var rules_margin := MarginContainer.new()
+	rules_margin.add_theme_constant_override("margin_left", 16)
+	rules_margin.add_theme_constant_override("margin_top", 12)
+	rules_margin.add_theme_constant_override("margin_right", 16)
+	rules_margin.add_theme_constant_override("margin_bottom", 12)
+	rules_panel.add_child(rules_margin)
+
+	var rules_text := Label.new()
+	rules_text.custom_minimum_size = Vector2(560, 0)
+	rules_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rules_text.add_theme_font_size_override("font_size", 15)
+	rules_text.add_theme_color_override("font_color", Color("#f7f1e3"))
+	rules_text.text = "How to play\nBid how many tricks you think you will win this round. Bids are secret until everyone locks in.\n\nYou must follow the led suit if you can. If you cannot, you may play any card. Trump cards beat other suits, and higher cards win within the same suit.\n\nHit your bid exactly to score 10 plus your bid. Miss your bid and score 0 for that round."
+	rules_margin.add_child(rules_text)
 
 	settings_row = HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -576,6 +646,17 @@ func _sync_settings_visibility() -> void:
 		var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
 		settings_panel.visible = settings_visible and not active_game
 
+func _on_rules_pressed() -> void:
+	rules_visible = not rules_visible
+	_sync_rules_visibility()
+
+func _sync_rules_visibility() -> void:
+	if rules_button:
+		rules_button.text = "Hide Rules" if rules_visible else "Rules"
+	if rules_panel:
+		var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
+		rules_panel.visible = rules_visible and not active_game
+
 func _on_mute_pressed() -> void:
 	Profile.set_music_muted(not Profile.music_muted())
 	_apply_audio_settings()
@@ -586,11 +667,25 @@ func _on_music_volume_changed(value: float) -> void:
 		Profile.set_music_muted(false)
 	_apply_audio_settings()
 
+func _on_sfx_volume_changed(value: float) -> void:
+	Profile.set_sfx_volume(value / 100.0)
+	_update_audio_labels()
+	_play_sfx("click")
+
 func _on_animal_selected(index: int) -> void:
 	if not animal_picker or index < 0:
 		return
 	Profile.set_animal(str(animal_picker.get_item_metadata(index)))
 	_update_local_profile_on_table()
+	_play_sfx("click")
+
+func _on_bot_personality_selected(index: int) -> void:
+	if not bot_personality_picker or index < 0:
+		return
+	Profile.set_bot_personality(str(bot_personality_picker.get_item_metadata(index)))
+	if state.get("phase", "") == "lobby" and _can_edit_lobby_settings():
+		_request_bot_personality(Profile.bot_personality())
+	_play_sfx("click")
 
 func _apply_audio_settings() -> void:
 	if not music_player:
@@ -604,6 +699,8 @@ func _update_audio_labels() -> void:
 		mute_button.text = "Unmute" if Profile.music_muted() else "Mute"
 	if music_volume_label:
 		music_volume_label.text = "Music Volume: %d%%" % roundi(Profile.music_volume() * 100.0)
+	if sfx_volume_label:
+		sfx_volume_label.text = "SFX Volume: %d%%" % roundi(Profile.sfx_volume() * 100.0)
 
 func _sync_advanced_network_visibility() -> void:
 	if advanced_network_button:
@@ -717,11 +814,13 @@ func _create_client_waiting_view() -> void:
 		"active_player": -1,
 		"connected": _filled_array(lobby_player_count, false),
 		"bots": _filled_array(lobby_player_count, false),
+		"bot_personality": Profile.bot_personality(),
 		"ready": _filled_array(lobby_player_count, false),
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
 		"winners": [],
 		"round_history": [],
+		"sound_event": {},
 		"message": "Connecting to host...",
 	}
 	local_hand = []
@@ -755,11 +854,13 @@ func _create_lobby(message: String) -> void:
 		"active_player": -1,
 		"connected": _connected_seats(),
 		"bots": _filled_array(lobby_player_count, false),
+		"bot_personality": Profile.bot_personality(),
 		"ready": _lobby_ready_seats(),
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
 		"winners": [],
 		"round_history": [],
+		"sound_event": {},
 		"message": message,
 	}
 	_publish_state()
@@ -794,11 +895,13 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"active_player": -1,
 		"connected": _connected_seats(),
 		"bots": state.get("bots", _filled_array(names.size(), false)).duplicate(true),
+		"bot_personality": str(state.get("bot_personality", Profile.bot_personality())),
 		"ready": _lobby_ready_seats(),
 		"play_again": _filled_array(names.size(), false),
 		"standings": [],
 		"winners": [],
 		"round_history": [],
+		"sound_event": {},
 		"message": "",
 	}
 	state["scores"].resize(names.size())
@@ -827,6 +930,7 @@ func _begin_round() -> void:
 	state["active_player"] = -1
 	state["phase"] = "bidding"
 	state["message"] = "Choose your secret bid."
+	_set_sound_event("deal")
 	_advance_bot_turn_serial()
 	_publish_state()
 	_schedule_bot_action()
@@ -855,6 +959,7 @@ func _receive_private_state(public_state: Dictionary, hand: Array, seat: int) ->
 		state = public_state
 	local_hand = hand
 	my_seat = seat
+	_handle_sound_event(public_state.get("sound_event", {}))
 	_render()
 
 func _public_state() -> Dictionary:
@@ -894,6 +999,7 @@ func _render() -> void:
 		net_row.visible = not active_game
 	_sync_advanced_network_visibility()
 	_sync_settings_visibility()
+	_sync_rules_visibility()
 	if settings_row:
 		settings_row.visible = not active_game
 	if map_row:
@@ -976,9 +1082,16 @@ func _render_game_end() -> void:
 	elif view_state["winners"].size() > 1:
 		winner_text = "Winners: %s" % ", ".join(view_state["winners"])
 
-	var text := "%s\n\nLeaderboard\n" % winner_text
+	var text := "%s\n\nFinal Leaderboard\n" % winner_text
 	for row in view_state["standings"]:
-		text += "%d. %s  %d pts\n" % [int(row["place"]), row["name"], int(row["score"])]
+		text += "%d. %s  %d pts  |  made %d, missed %d  |  best +%d\n" % [
+			int(row["place"]),
+			row["name"],
+			int(row["score"]),
+			int(row.get("made", 0)),
+			int(row.get("missed", 0)),
+			int(row.get("best_round", 0)),
+		]
 	text += "\n%s" % view_state["message"]
 	left_stats_label.text = ""
 	right_info_label.text = ""
@@ -1027,12 +1140,15 @@ func _render_lobby() -> void:
 	left_stats_label.text = ""
 	right_info_label.text = ""
 	table_label.add_theme_font_size_override("font_size", 16)
-	var text := "Multiplayer Lobby\n"
-	text += "%d players | %d max cards | %s\n" % [
+	var table_host := "Table Host: %s\n" % _lobby_host_name()
+	var text := "Multiplayer Lobby\n\n"
+	text += "%s" % table_host
+	text += "Setup: %d players, %d max cards, %s\n" % [
 		view_state["num_players"],
 		view_state["max_cards"],
 		MAP_NAMES.get(str(view_state.get("map_id", _selected_map_id())), _selected_map_name()),
 	]
+	text += "Bots: %s\n" % str(BOT_PERSONALITY_NAMES.get(str(view_state.get("bot_personality", "smart")), "Smart"))
 	text += "You are seat %d: %s\n" % [my_seat + 1, view_state["names"][my_seat]]
 	if multiplayer.multiplayer_peer and multiplayer.is_server():
 		var addresses := Net.local_join_addresses(server_port)
@@ -1040,18 +1156,17 @@ func _render_lobby() -> void:
 			text += "Join: local network IP not found\n"
 		else:
 			text += "Join: %s\n" % ", ".join(addresses)
-	var seat_parts: Array = []
+	text += "\nSeats\n"
 	for i in range(view_state["num_players"]):
 		var status := "waiting"
 		if view_state.has("bots") and view_state["bots"][i]:
 			status = "bot"
 		elif view_state["connected"][i]:
 			status = "ready" if view_state["ready"][i] else "not ready"
-		seat_parts.append("%d %s: %s" % [i + 1, view_state["names"][i], status])
-	text += "Seats: %s\n" % " | ".join(seat_parts)
+		text += "%d. %s - %s\n" % [i + 1, view_state["names"][i], status]
 	if not version_warning.is_empty():
 		text += "%s\n" % version_warning
-	text += view_state["message"]
+	text += "\n%s" % view_state["message"]
 	table_label.text = text
 	_render_trick()
 	_render_actions()
@@ -1180,7 +1295,7 @@ func _set_3d_card_hover(index: int) -> void:
 		table_view_3d.set_hovered_hand_index(index)
 
 func _mouse_over_command_ui(position: Vector2) -> bool:
-	for control in [action_box, name_input, online_lobby_picker, advanced_network_button, address_input, player_count_spin, max_cards_spin, discovered_game_picker]:
+	for control in [action_box, name_input, online_lobby_picker, advanced_network_button, mute_button, settings_button, rules_button, settings_panel, rules_panel, address_input, player_count_spin, max_cards_spin, discovered_game_picker, bot_personality_picker]:
 		if control and control.visible:
 			var rect := Rect2(control.global_position, control.size)
 			if rect.has_point(position):
@@ -1291,6 +1406,14 @@ func _view_can_request_start() -> bool:
 			return seat == my_seat
 	return false
 
+func _lobby_host_name() -> String:
+	if view_state.is_empty():
+		return "Waiting"
+	for seat in range(view_state["num_players"]):
+		if view_state["connected"][seat] and not (view_state.has("bots") and bool(view_state["bots"][seat])):
+			return str(view_state["names"][seat])
+	return "Waiting"
+
 func _play_again_count() -> int:
 	if not view_state.has("play_again"):
 		return 0
@@ -1338,6 +1461,83 @@ func _music_stream_for_key(key: String):
 	if not stream and key != "menu":
 		stream = _music_stream_for_key("menu")
 	music_streams[key] = stream
+	return stream
+
+func _set_sound_event(name: String, seat := -1) -> void:
+	if state.is_empty():
+		return
+	var serial := int(state.get("sound_serial", 0)) + 1
+	state["sound_serial"] = serial
+	state["sound_event"] = {"name": name, "serial": serial, "seat": seat}
+
+func _handle_sound_event(event) -> void:
+	if typeof(event) != TYPE_DICTIONARY:
+		return
+	var serial := int(event.get("serial", 0))
+	if serial <= 0 or serial <= last_sound_serial:
+		return
+	last_sound_serial = serial
+	_play_sfx(str(event.get("name", "")))
+
+func _play_sfx(name: String) -> void:
+	if not sfx_player:
+		return
+	var volume := Profile.sfx_volume()
+	if volume <= 0.0:
+		return
+	var stream = _sfx_stream_for_name(name)
+	if not stream:
+		return
+	sfx_player.stream = stream
+	sfx_player.volume_db = linear_to_db(volume)
+	sfx_player.play()
+
+func _sfx_stream_for_name(name: String):
+	if sfx_streams.has(name):
+		return sfx_streams[name]
+	var freq := 540.0
+	var duration := 0.10
+	match name:
+		"click":
+			freq = 720.0
+			duration = 0.045
+		"bid":
+			freq = 620.0
+			duration = 0.075
+		"card":
+			freq = 390.0
+			duration = 0.085
+		"deal":
+			freq = 500.0
+			duration = 0.16
+		"trick":
+			freq = 780.0
+			duration = 0.18
+		"round":
+			freq = 660.0
+			duration = 0.22
+		"game":
+			freq = 880.0
+			duration = 0.32
+	var stream := _make_tone_stream(freq, duration)
+	sfx_streams[name] = stream
+	return stream
+
+func _make_tone_stream(freq: float, duration: float) -> AudioStreamWAV:
+	var mix_rate := 22050
+	var frames := int(float(mix_rate) * duration)
+	var data := PackedByteArray()
+	data.resize(frames * 2)
+	for i in range(frames):
+		var t := float(i) / float(mix_rate)
+		var fade := minf(1.0, float(frames - i) / maxf(float(frames) * 0.22, 1.0))
+		var sample := int(sin(TAU * freq * t) * 11000.0 * fade)
+		data.encode_s16(i * 2, sample)
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = mix_rate
+	stream.stereo = false
+	stream.data = data
 	return stream
 
 func _selected_map_name() -> String:
@@ -1413,6 +1613,12 @@ func _sync_lobby_settings_controls() -> void:
 		max_cards_spin.max_value = GameRules.max_allowed_cards(lobby_player_count)
 		max_cards_spin.value = clampi(lobby_max_cards, 1, GameRules.max_allowed_cards(lobby_player_count))
 		max_cards_spin.set_block_signals(false)
+	if bot_personality_picker:
+		bot_personality_picker.disabled = not _can_edit_lobby_settings()
+		var bot_index := BOT_PERSONALITY_IDS.find(str(view_state.get("bot_personality", Profile.bot_personality())))
+		bot_personality_picker.set_block_signals(true)
+		bot_personality_picker.selected = max(bot_index, 0)
+		bot_personality_picker.set_block_signals(false)
 
 func _on_name_changed(new_text: String) -> void:
 	local_player_name = new_text.strip_edges()
@@ -1491,6 +1697,33 @@ func _apply_lobby_map(map_id: String) -> void:
 		_publish_state()
 		if multiplayer.multiplayer_peer and multiplayer.is_server():
 			Net.update_advertisement(_discovery_info())
+	elif not multiplayer.multiplayer_peer:
+		_create_offline_lobby()
+
+func _request_bot_personality(personality: String) -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_update_bot_personality.rpc_id(1, personality)
+	else:
+		_apply_bot_personality(personality)
+
+@rpc("any_peer", "reliable")
+func _server_update_bot_personality(personality: String) -> void:
+	if not multiplayer.is_server() or not dedicated_server:
+		return
+	if state.get("phase", "") != "lobby":
+		return
+	var sender_seat := _seat_for_peer(multiplayer.get_remote_sender_id())
+	if sender_seat != _first_connected_human_seat():
+		return
+	_apply_bot_personality(personality)
+
+func _apply_bot_personality(personality: String) -> void:
+	if not BOT_PERSONALITY_IDS.has(personality):
+		personality = "smart"
+	if state.has("bot_personality") and state.get("phase", "") == "lobby":
+		state["bot_personality"] = personality
+		state["message"] = "Bot style changed to %s." % str(BOT_PERSONALITY_NAMES.get(personality, "Smart"))
+		_publish_state()
 	elif not multiplayer.multiplayer_peer:
 		_create_offline_lobby()
 
@@ -1594,9 +1827,11 @@ func _apply_bid(seat: int, amount: int) -> void:
 		state["phase"] = "playing"
 		state["active_player"] = state["leader"]
 		state["message"] = "%s leads." % state["names"][state["leader"]]
+		_set_sound_event("bid", seat)
 		_advance_bot_turn_serial()
 	else:
 		state["message"] = _bidding_message()
+		_set_sound_event("bid", seat)
 	_publish_state()
 	_schedule_bot_action()
 
@@ -1629,6 +1864,7 @@ func _apply_card(seat: int, card: Dictionary) -> void:
 	if not state.has("played_cards"):
 		state["played_cards"] = []
 	state["played_cards"].append(card.duplicate(true))
+	_set_sound_event("card", seat)
 
 	if state["trick"].size() == state["num_players"]:
 		var winner := GameRules.trick_winner(state["trick"], state["led_suit"], state["trump"])
@@ -1636,6 +1872,7 @@ func _apply_card(seat: int, card: Dictionary) -> void:
 		state["active_player"] = winner
 		state["phase"] = "trick_end"
 		state["message"] = "%s wins the trick and leads next." % state["names"][winner]
+		_set_sound_event("trick", winner)
 		_publish_state()
 		_schedule_auto_continue_after_trick(state["round_index"], winner)
 		return
@@ -1681,6 +1918,7 @@ func _continue_after_trick() -> void:
 			state["scores"][i] += deltas[i]
 		state["phase"] = "round_end"
 		state["message"] = "Round over."
+		_set_sound_event("round")
 	else:
 		state["phase"] = "playing"
 		state["active_player"] = state["leader"]
@@ -1760,17 +1998,28 @@ func _bot_choose_bid(seat: int) -> int:
 		estimate += 0.15
 	elif round_size >= 5:
 		estimate -= 0.2
-	estimate += rng.randf_range(-0.28, 0.28)
+	match _bot_personality():
+		"casual":
+			estimate += rng.randf_range(-0.65, 0.65)
+		"ruthless":
+			estimate += 0.18
+			estimate += rng.randf_range(-0.12, 0.18)
+		_:
+			estimate += rng.randf_range(-0.28, 0.28)
 	return clampi(roundi(estimate), 0, round_size)
 
 func _bot_choose_card(seat: int) -> Dictionary:
 	var legal: Array = GameRules.legal_cards(state["hands"][seat], state["led_suit"])
 	if legal.is_empty():
 		return state["hands"][seat][0]
+	if _bot_personality() == "casual" and rng.randf() < 0.18:
+		return legal[rng.randi_range(0, legal.size() - 1)]
 	var target: int = maxi(0, int(state["bids"][seat]) - int(state["tricks_won"][seat]))
 	var remaining_after_play: int = maxi(0, state["hands"][seat].size() - 1)
 	var must_chase: bool = target >= state["hands"][seat].size()
 	var wants_trick: bool = target > 0
+	if _bot_personality() == "ruthless" and target > 0 and remaining_after_play <= target:
+		must_chase = true
 
 	if state["trick"].is_empty():
 		return _bot_choose_lead_card(legal, target, remaining_after_play, must_chase)
@@ -1882,8 +2131,17 @@ func _bot_pick_discard(cards: Array) -> Dictionary:
 func _bot_pick_from_top(cards: Array, spread: int) -> Dictionary:
 	if cards.is_empty():
 		return {}
+	match _bot_personality():
+		"casual":
+			spread += 2
+		"ruthless":
+			spread = 1
 	var limit: int = mini(cards.size() - 1, spread - 1)
 	return cards[rng.randi_range(0, limit)]
+
+func _bot_personality() -> String:
+	var personality := str(state.get("bot_personality", Profile.bot_personality()))
+	return personality if BOT_PERSONALITY_IDS.has(personality) else "smart"
 
 func _bot_beats_current_trick(card: Dictionary) -> bool:
 	if state["trick"].is_empty():
@@ -1993,13 +2251,29 @@ func _end_game() -> void:
 	state["winners"] = winners
 	state["game_id"] = game_id
 	state["message"] = "Everyone can vote to play again."
+	_set_sound_event("game")
 	_publish_state()
 	_publish_game_results(game_id, winners)
 
 func _build_standings() -> Array:
 	var rows: Array = []
 	for i in range(state["num_players"]):
-		rows.append({"name": state["names"][i], "score": state["scores"][i]})
+		var made := 0
+		var missed := 0
+		var best_round := 0
+		for round_summary in state.get("round_history", []):
+			if round_summary["hit"][i]:
+				made += 1
+				best_round = maxi(best_round, 10 + int(round_summary["bids"][i]))
+			else:
+				missed += 1
+		rows.append({
+			"name": state["names"][i],
+			"score": state["scores"][i],
+			"made": made,
+			"missed": missed,
+			"best_round": best_round,
+		})
 	rows.sort_custom(func(a, b): return int(a["score"]) > int(b["score"]))
 	var place := 0
 	var shown_place := 0
@@ -2075,6 +2349,19 @@ func _server_register_profile(profile: Dictionary) -> void:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	var seat := _seat_for_peer(peer_id)
+	var profile_id := str(profile.get("id", ""))
+	var reconnect_seat := _seat_for_profile_id(profile_id)
+	if reconnect_seat < 0 and seat >= 0 and seat < state.get("profiles", []).size():
+		var current_profile = state["profiles"][seat]
+		if typeof(current_profile) == TYPE_DICTIONARY and not profile_id.is_empty() and str(current_profile.get("id", "")) == profile_id:
+			reconnect_seat = seat
+	if reconnect_seat >= 0 and reconnect_seat != seat:
+		if seat >= 0 and seat < seat_peers.size():
+			seat_peers[seat] = 0
+		seat = reconnect_seat
+		seat_peers[seat] = peer_id
+		if state.has("bots"):
+			state["bots"][seat] = false
 	if seat < 0 or seat >= state["num_players"]:
 		return
 	var clean_name := str(profile.get("display_name", "")).strip_edges()
@@ -2082,13 +2369,15 @@ func _server_register_profile(profile: Dictionary) -> void:
 		clean_name = "Player %d" % [seat + 1]
 	state["names"][seat] = clean_name.substr(0, 18)
 	state["profiles"][seat] = {
-		"id": str(profile.get("id", "")),
+		"id": profile_id,
 		"display_name": state["names"][seat],
 		"animal": _clean_animal_id(str(profile.get("animal", "fox"))),
 		"games_played": int(profile.get("games_played", 0)),
 		"wins": int(profile.get("wins", 0)),
 	}
-	state["message"] = "%s joined seat %d." % [state["names"][seat], seat + 1]
+	state["connected"] = _connected_seats()
+	state["ready"] = _lobby_ready_seats()
+	state["message"] = "%s rejoined seat %d." % [state["names"][seat], seat + 1] if reconnect_seat >= 0 else "%s joined seat %d." % [state["names"][seat], seat + 1]
 	_publish_state()
 
 func _request_toggle_ready() -> void:
@@ -2147,6 +2436,19 @@ func _first_connected_human_seat() -> int:
 		return -1
 	for seat in range(state["num_players"]):
 		if seat < seat_peers.size() and int(seat_peers[seat]) != 0 and not _is_bot_seat(seat):
+			return seat
+	return -1
+
+func _seat_for_profile_id(profile_id: String) -> int:
+	if profile_id.is_empty() or not state.has("profiles"):
+		return -1
+	for seat in range(min(state["profiles"].size(), seat_peers.size())):
+		if int(seat_peers[seat]) != 0:
+			continue
+		if _is_bot_seat(seat):
+			continue
+		var profile = state["profiles"][seat]
+		if typeof(profile) == TYPE_DICTIONARY and str(profile.get("id", "")) == profile_id:
 			return seat
 	return -1
 
@@ -2221,6 +2523,7 @@ func _return_to_lobby(message: String) -> void:
 	lobby_map_index = _map_index_for_id(str(state.get("map_id", _selected_map_id())))
 	var names: Array = state["names"].duplicate(true)
 	var profiles: Array = state["profiles"].duplicate(true)
+	var bot_personality := str(state.get("bot_personality", Profile.bot_personality()))
 	state = {
 		"phase": "lobby",
 		"map_id": _selected_map_id(),
@@ -2244,11 +2547,13 @@ func _return_to_lobby(message: String) -> void:
 		"active_player": -1,
 		"connected": _connected_seats(),
 		"bots": state.get("bots", _filled_array(lobby_player_count, false)).duplicate(true),
+		"bot_personality": bot_personality,
 		"ready": _filled_array(lobby_player_count, false),
 		"play_again": _filled_array(lobby_player_count, false),
 		"standings": [],
 		"winners": [],
 		"round_history": [],
+		"sound_event": {},
 		"message": message,
 	}
 	_publish_state()

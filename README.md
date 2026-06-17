@@ -1,6 +1,6 @@
 # Oh Hell
 
-Online multiplayer Oh Hell built in Godot 4. The game supports Windows and macOS clients, bot-filled tables, profiles, 3D table views, and a dedicated Godot server.
+Online multiplayer Oh Hell built in Godot 4. The game supports Windows and macOS clients, bot-filled tables, profiles, reconnecting by profile, 3D table views, music/SFX controls, and a dedicated Godot server.
 
 ## What is included
 
@@ -16,6 +16,8 @@ The server is authoritative. Clients submit bids and card plays to the server, a
 - The lobby supports 2 to 10 players.
 - Empty seats can be filled with bots.
 - The first joined player can manage lobby settings on the dedicated server.
+- Rejoining with the same saved profile returns a player to their previous seat when possible.
+- Bot style can be set to Casual, Smart, or Ruthless from Settings.
 
 ## Current Online Server
 
