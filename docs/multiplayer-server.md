@@ -45,3 +45,15 @@ You can choose a different port with `--port=PORT`. If you do, use the same port
 --map=pirate          pirate, space, living_room, or jungle
 --port=24567          UDP port for clients
 ```
+
+## Public lobby ports
+
+The client currently shows three named public lobbies. Each lobby is a normal dedicated server on a different UDP port:
+
+```text
+Family Table    147.224.130.79:24567
+Practice Table  147.224.130.79:24569
+Big Table       147.224.130.79:24570
+```
+
+At minimum, keep `Family Table` running on port `24567`. To make the other lobby buttons work, run extra server services on ports `24569` and `24570`, and add matching Oracle ingress rules for UDP `24569` and UDP `24570`.

@@ -25,7 +25,7 @@ The public test server is:
 147.224.130.79:24567
 ```
 
-New client builds use this address when players click `Play Online`. For local testing, open `Advanced`, then replace the address with `127.0.0.1`.
+New client builds show named public lobbies. `Family Table` uses this address by default. For local testing, open `Advanced`, then replace the address with `127.0.0.1`.
 
 ## Next Things To Build
 

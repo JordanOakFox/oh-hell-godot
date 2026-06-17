@@ -1,8 +1,13 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.1"
+const GAME_VERSION := "0.2.2"
 const DEFAULT_SERVER_ADDRESS := "147.224.130.79:24567"
+const PUBLIC_LOBBIES := [
+	{"name": "Family Table", "address": "147.224.130.79:24567"},
+	{"name": "Practice Table", "address": "147.224.130.79:24569"},
+	{"name": "Big Table", "address": "147.224.130.79:24570"},
+]
 const DEFAULT_MAX_CARDS := 7
 const DEFAULT_PLAYERS := 4
 const MAP_IDS := ["pirate", "space", "living_room", "jungle"]
@@ -72,6 +77,7 @@ var hand_box: Control
 var action_box: HBoxContainer
 var address_input: LineEdit
 var name_input: LineEdit
+var online_lobby_picker: OptionButton
 var player_count_spin: SpinBox
 var max_cards_spin: SpinBox
 var discovered_game_picker: OptionButton
@@ -157,6 +163,14 @@ func _build_ui() -> void:
 	name_input.custom_minimum_size = Vector2(160, 0)
 	name_input.text_changed.connect(_on_name_changed)
 	net_row.add_child(name_input)
+
+	online_lobby_picker = OptionButton.new()
+	online_lobby_picker.custom_minimum_size = Vector2(210, 0)
+	for lobby in PUBLIC_LOBBIES:
+		var label := "%s" % str(lobby.get("name", "Public Lobby"))
+		online_lobby_picker.add_item(label)
+		online_lobby_picker.set_item_metadata(online_lobby_picker.item_count - 1, lobby)
+	net_row.add_child(online_lobby_picker)
 
 	var online_button := Button.new()
 	online_button.text = "Play Online"
@@ -427,8 +441,17 @@ func _on_host_pressed() -> void:
 	Net.start_advertising(_discovery_info())
 
 func _on_play_online_pressed() -> void:
-	address_input.text = DEFAULT_SERVER_ADDRESS
+	address_input.text = _selected_public_lobby_address()
 	_on_join_pressed()
+
+func _selected_public_lobby_address() -> String:
+	if online_lobby_picker:
+		var index := online_lobby_picker.selected
+		if index >= 0:
+			var metadata = online_lobby_picker.get_item_metadata(index)
+			if typeof(metadata) == TYPE_DICTIONARY:
+				return str(metadata.get("address", DEFAULT_SERVER_ADDRESS))
+	return DEFAULT_SERVER_ADDRESS
 
 func _on_advanced_network_pressed() -> void:
 	advanced_network_visible = not advanced_network_visible
@@ -1004,7 +1027,7 @@ func _set_3d_card_hover(index: int) -> void:
 		table_view_3d.set_hovered_hand_index(index)
 
 func _mouse_over_command_ui(position: Vector2) -> bool:
-	for control in [action_box, name_input, advanced_network_button, address_input, player_count_spin, max_cards_spin, discovered_game_picker]:
+	for control in [action_box, name_input, online_lobby_picker, advanced_network_button, address_input, player_count_spin, max_cards_spin, discovered_game_picker]:
 		if control and control.visible:
 			var rect := Rect2(control.global_position, control.size)
 			if rect.has_point(position):
