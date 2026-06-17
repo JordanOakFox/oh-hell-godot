@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.6"
+const GAME_VERSION := "0.2.7"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const ANIMAL_NAMES := {
 	"bunny": "Bunny",
@@ -141,6 +141,9 @@ func _input(event: InputEvent) -> void:
 	if (event is InputEventMouseMotion or event is InputEventMouseButton) and _mouse_over_command_ui(event.position):
 		_set_3d_card_hover(-1)
 		return
+	if (event is InputEventScreenTouch or event is InputEventScreenDrag) and _mouse_over_command_ui(event.position):
+		_set_3d_card_hover(-1)
+		return
 
 	if event is InputEventMouseMotion:
 		_set_3d_card_hover(_legal_3d_card_index_at(event.position))
@@ -149,6 +152,16 @@ func _input(event: InputEvent) -> void:
 		if index >= 0 and index < local_hand.size():
 			_set_3d_card_hover(-1)
 			_submit_card(local_hand[index])
+	elif event is InputEventScreenDrag:
+		_set_3d_card_hover(_legal_3d_card_index_at(event.position))
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			_set_3d_card_hover(_legal_3d_card_index_at(event.position))
+		else:
+			var touch_index := _legal_3d_card_index_at(event.position)
+			if touch_index >= 0 and touch_index < local_hand.size():
+				_set_3d_card_hover(-1)
+				_submit_card(local_hand[touch_index])
 
 func _build_ui() -> void:
 	table_view_3d = TableView3DScript.new()
