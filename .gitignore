@@ -4,6 +4,7 @@
 # Godot export/build output
 exports/
 builds/
+build_tools/
 *.pck
 *.zip
 
@@ -11,4 +12,3 @@ builds/
 .DS_Store
 Thumbs.db
 desktop.ini
-
