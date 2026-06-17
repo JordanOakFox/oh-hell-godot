@@ -1,6 +1,8 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
+const GAME_VERSION := "0.2.0"
+const DEFAULT_SERVER_ADDRESS := "147.224.130.79:24567"
 const DEFAULT_MAX_CARDS := 7
 const DEFAULT_PLAYERS := 4
 const MAP_IDS := ["pirate", "space", "living_room", "jungle"]
@@ -42,8 +44,10 @@ var bot_action_key := ""
 var bot_turn_serial := 0
 var hovered_3d_card_index := -1
 var dedicated_server := false
+var version_warning := ""
 
 var title_label: Label
+var version_label: Label
 var status_label: Label
 var table_label: Label
 var player_hud_panel: PanelContainer
@@ -133,6 +137,13 @@ func _build_ui() -> void:
 	title_label.add_theme_color_override("font_color", Color("#f0d28a"))
 	root.add_child(title_label)
 
+	version_label = Label.new()
+	version_label.text = "v%s" % GAME_VERSION
+	version_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	version_label.add_theme_font_size_override("font_size", 14)
+	version_label.add_theme_color_override("font_color", Color("#f7f1e399"))
+	root.add_child(version_label)
+
 	net_row = HBoxContainer.new()
 	net_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(net_row)
@@ -150,13 +161,13 @@ func _build_ui() -> void:
 	net_row.add_child(host_button)
 
 	address_input = LineEdit.new()
-	address_input.text = "127.0.0.1"
-	address_input.placeholder_text = "Host IP or IP:port"
+	address_input.text = DEFAULT_SERVER_ADDRESS
+	address_input.placeholder_text = "Server IP or IP:port"
 	address_input.custom_minimum_size = Vector2(190, 0)
 	net_row.add_child(address_input)
 
 	var join_button := Button.new()
-	join_button.text = "Join"
+	join_button.text = "Join Online"
 	join_button.pressed.connect(_on_join_pressed)
 	net_row.add_child(join_button)
 
@@ -420,11 +431,11 @@ func _on_join_pressed() -> void:
 	_read_local_profile_input()
 	var address := address_input.text.strip_edges()
 	if address.is_empty():
-		address = "127.0.0.1"
+		address = DEFAULT_SERVER_ADDRESS
 	var endpoint := _parse_join_endpoint(address, _command_line_int("--port", Net.DEFAULT_PORT, 1, 65535))
 	var err := Net.join(endpoint["address"], endpoint["port"])
 	if err != OK:
-		_set_status("Join failed: %s" % error_string(err))
+		_set_status("Could not start connection: %s" % error_string(err))
 	else:
 		Net.stop_discovery()
 		_create_client_waiting_view()
@@ -628,6 +639,10 @@ func _publish_state() -> void:
 @rpc("authority", "call_local", "reliable")
 func _receive_private_state(public_state: Dictionary, hand: Array, seat: int) -> void:
 	view_state = public_state
+	var server_version := str(public_state.get("server_version", GAME_VERSION))
+	version_warning = ""
+	if server_version != GAME_VERSION:
+		version_warning = "Version warning: you have v%s, server has v%s." % [GAME_VERSION, server_version]
 	if not multiplayer.multiplayer_peer or not multiplayer.is_server():
 		state = public_state
 	local_hand = hand
@@ -636,6 +651,7 @@ func _receive_private_state(public_state: Dictionary, hand: Array, seat: int) ->
 
 func _public_state() -> Dictionary:
 	var public := state.duplicate(true)
+	public["server_version"] = GAME_VERSION
 	public.erase("hands")
 	if public["phase"] == "bidding":
 		var hidden_bids := []
@@ -664,6 +680,8 @@ func _render() -> void:
 	var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
 	if title_label:
 		title_label.visible = view_state.get("phase", "") in ["connecting", "lobby", "game_end"]
+	if version_label:
+		version_label.visible = title_label and title_label.visible
 	if net_row:
 		net_row.visible = not active_game
 	if settings_row:
@@ -820,6 +838,8 @@ func _render_lobby() -> void:
 			status = "ready" if view_state["ready"][i] else "not ready"
 		seat_parts.append("%d %s: %s" % [i + 1, view_state["names"][i], status])
 	text += "Seats: %s\n" % " | ".join(seat_parts)
+	if not version_warning.is_empty():
+		text += "%s\n" % version_warning
 	text += view_state["message"]
 	table_label.text = text
 	_render_trick()
@@ -1788,7 +1808,7 @@ func _on_connected_to_server() -> void:
 
 func _on_connection_failed() -> void:
 	_create_client_waiting_view()
-	view_state["message"] = "Connection failed."
+	view_state["message"] = "Could not reach the server. Check the address, your internet, or try again."
 	_render()
 
 @rpc("any_peer", "reliable")

@@ -1,33 +1,41 @@
-# Oh Hell Multiplayer Starter for Godot 4
+# Oh Hell
 
-This starter ports the rules from `oh-hell_1.html` into GDScript and wraps them in a host-authoritative multiplayer shape.
+Online multiplayer Oh Hell built in Godot 4. The game supports Windows and macOS clients, bot-filled tables, profiles, 3D table views, and a dedicated Godot server.
 
 ## What is included
 
 - `scripts/game_rules.gd`: deck creation, shuffle/deal, round sequence, legal-card checks, trick winner logic, and scoring.
 - `scripts/net.gd`: simple ENet host/join helpers.
-- `scripts/main.gd`: a minimal playable table UI and RPC flow.
+- `scripts/main.gd`: the lobby, table UI, dedicated-server mode, and RPC flow.
 
-## Current multiplayer model
+## Current Multiplayer Model
 
-The host is authoritative. Clients submit bids and card plays to the host, and the host validates/mutates table state. Each peer receives only its own private hand plus public table state.
+The server is authoritative. Clients submit bids and card plays to the server, and the server validates/mutates table state. Each peer receives only its own private hand plus public table state.
 
-The current seat assignment is intentionally simple:
-
-- Host is seat 1.
-- Joined peers fill seats 2, 3, 4, and so on.
+- Joined peers fill seats 1, 2, 3, and so on.
 - The lobby supports 2 to 10 players.
-- The host chooses player count and max cards before starting.
+- Empty seats can be filled with bots.
+- The first joined player can manage lobby settings on the dedicated server.
 
-## Next things to build
+## Current Online Server
+
+The public test server is:
+
+```text
+147.224.130.79:24567
+```
+
+New client builds default to this address. For local testing, replace it with `127.0.0.1`.
+
+## Next Things To Build
 
 1. Add reconnect handling and explicit turn timers.
 2. Add validation tests for `game_rules.gd`.
-3. Add an online relay/lobby option for games outside local Wi-Fi.
+3. Add Steam achievements/invites after the base Steam page and builds are ready.
 
 ## Running it
 
-Open `outputs/oh_hell_godot_starter` as a Godot 4 project and run `scenes/main.tscn`.
+Open this folder as a Godot 4.6 project and run `scenes/main.tscn`.
 
 For local multiplayer testing, run one instance as Host and a second instance as Join localhost. Two-player games are supported, which makes quick testing much easier.
 
