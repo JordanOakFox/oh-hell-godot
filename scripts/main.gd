@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.0"
+const GAME_VERSION := "0.2.1"
 const DEFAULT_SERVER_ADDRESS := "147.224.130.79:24567"
 const DEFAULT_MAX_CARDS := 7
 const DEFAULT_PLAYERS := 4
@@ -45,6 +45,7 @@ var bot_turn_serial := 0
 var hovered_3d_card_index := -1
 var dedicated_server := false
 var version_warning := ""
+var advanced_network_visible := false
 
 var title_label: Label
 var version_label: Label
@@ -53,6 +54,8 @@ var table_label: Label
 var player_hud_panel: PanelContainer
 var left_stats_label: Label
 var net_row: HBoxContainer
+var advanced_net_row: HBoxContainer
+var advanced_network_button: Button
 var settings_row: HBoxContainer
 var map_row: HBoxContainer
 var map_name_label: Label
@@ -155,31 +158,47 @@ func _build_ui() -> void:
 	name_input.text_changed.connect(_on_name_changed)
 	net_row.add_child(name_input)
 
+	var online_button := Button.new()
+	online_button.text = "Play Online"
+	online_button.custom_minimum_size = Vector2(132, 0)
+	online_button.pressed.connect(_on_play_online_pressed)
+	net_row.add_child(online_button)
+
+	advanced_network_button = Button.new()
+	advanced_network_button.text = "Advanced"
+	advanced_network_button.pressed.connect(_on_advanced_network_pressed)
+	net_row.add_child(advanced_network_button)
+
+	advanced_net_row = HBoxContainer.new()
+	advanced_net_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	advanced_net_row.visible = false
+	root.add_child(advanced_net_row)
+
 	var host_button := Button.new()
-	host_button.text = "Host"
+	host_button.text = "Host Local"
 	host_button.pressed.connect(_on_host_pressed)
-	net_row.add_child(host_button)
+	advanced_net_row.add_child(host_button)
 
 	address_input = LineEdit.new()
 	address_input.text = DEFAULT_SERVER_ADDRESS
 	address_input.placeholder_text = "Server IP or IP:port"
 	address_input.custom_minimum_size = Vector2(190, 0)
-	net_row.add_child(address_input)
+	advanced_net_row.add_child(address_input)
 
 	var join_button := Button.new()
-	join_button.text = "Join Online"
+	join_button.text = "Join Address"
 	join_button.pressed.connect(_on_join_pressed)
-	net_row.add_child(join_button)
+	advanced_net_row.add_child(join_button)
 
 	discovered_game_picker = OptionButton.new()
 	discovered_game_picker.custom_minimum_size = Vector2(220, 0)
 	discovered_game_picker.add_item("Scanning for games...")
-	net_row.add_child(discovered_game_picker)
+	advanced_net_row.add_child(discovered_game_picker)
 
 	var join_found_button := Button.new()
-	join_found_button.text = "Join Found"
+	join_found_button.text = "Join LAN"
 	join_found_button.pressed.connect(_on_join_found_pressed)
-	net_row.add_child(join_found_button)
+	advanced_net_row.add_child(join_found_button)
 
 	settings_row = HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -406,6 +425,21 @@ func _on_host_pressed() -> void:
 	seat_peers = _new_seat_peers(lobby_player_count)
 	_create_lobby("Hosting. Waiting for players...")
 	Net.start_advertising(_discovery_info())
+
+func _on_play_online_pressed() -> void:
+	address_input.text = DEFAULT_SERVER_ADDRESS
+	_on_join_pressed()
+
+func _on_advanced_network_pressed() -> void:
+	advanced_network_visible = not advanced_network_visible
+	_sync_advanced_network_visibility()
+
+func _sync_advanced_network_visibility() -> void:
+	if advanced_network_button:
+		advanced_network_button.text = "Hide Advanced" if advanced_network_visible else "Advanced"
+	if advanced_net_row:
+		var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
+		advanced_net_row.visible = advanced_network_visible and not active_game
 
 func _start_dedicated_server() -> void:
 	dedicated_server = true
@@ -684,6 +718,7 @@ func _render() -> void:
 		version_label.visible = title_label and title_label.visible
 	if net_row:
 		net_row.visible = not active_game
+	_sync_advanced_network_visibility()
 	if settings_row:
 		settings_row.visible = not active_game
 	if map_row:
@@ -969,7 +1004,7 @@ func _set_3d_card_hover(index: int) -> void:
 		table_view_3d.set_hovered_hand_index(index)
 
 func _mouse_over_command_ui(position: Vector2) -> bool:
-	for control in [action_box, name_input, address_input, player_count_spin, max_cards_spin, discovered_game_picker]:
+	for control in [action_box, name_input, advanced_network_button, address_input, player_count_spin, max_cards_spin, discovered_game_picker]:
 		if control and control.visible:
 			var rect := Rect2(control.global_position, control.size)
 			if rect.has_point(position):

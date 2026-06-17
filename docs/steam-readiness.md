@@ -6,7 +6,8 @@ This project can be prepared for Steam before the Steam Direct fee is paid. The 
 
 - Product name is `Oh Hell` instead of the old starter name.
 - Windows and macOS export presets exist.
-- The client defaults to the public server at `147.224.130.79:24567`.
+- The main menu has a `Play Online` button that joins the public server at `147.224.130.79:24567`.
+- Direct IP and LAN discovery are still available under `Advanced` for testing.
 - Clients and servers publish a game version so mismatched builds can warn players.
 - A dedicated server can run through the `oh-hell` systemd service.
 
