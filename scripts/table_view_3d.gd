@@ -61,6 +61,7 @@ var current_map_id := "landing"
 var table_felt_color := Color("#0b5a3f")
 var table_rail_color := Color("#7a4a28")
 var time := 0.0
+var last_emote_serial := 0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -94,6 +95,7 @@ func _process(delta: float) -> void:
 	_animate_waves()
 	_animate_flag()
 	_animate_seats()
+	_animate_emotes()
 	_update_camera()
 
 func _input(event: InputEvent) -> void:
@@ -139,6 +141,19 @@ func set_player_hand(hand: Array) -> void:
 
 func set_hovered_hand_index(index: int) -> void:
 	hovered_hand_index = index
+
+func set_emote_event(event) -> void:
+	if typeof(event) != TYPE_DICTIONARY:
+		return
+	var serial := int(event.get("serial", 0))
+	if serial <= 0 or serial <= last_emote_serial:
+		return
+	last_emote_serial = serial
+	var seat := int(event.get("seat", -1))
+	if seat < 0 or seat >= seats.size():
+		return
+	if str(event.get("name", "")) == "middle_finger":
+		_show_middle_finger_emote(seat)
 
 func is_mouse_look_enabled() -> bool:
 	return look_enabled
@@ -674,6 +689,11 @@ func _make_avatar(seat: int, animal := "fox") -> Node3D:
 	active_marker.position = Vector3(0, 0.02, 0)
 	active_marker.visible = false
 	root.add_child(active_marker)
+
+	var emote_anchor := Node3D.new()
+	emote_anchor.name = "Emote"
+	emote_anchor.position = Vector3(0, 1.12, -0.58)
+	root.add_child(emote_anchor)
 	return root
 
 func _animal_ear_size(animal: String) -> Vector3:
@@ -800,6 +820,71 @@ func _update_trick_pile(pile: Node3D, trick_count: int) -> void:
 		count_label.no_depth_test = true
 		count_label.position = Vector3(0.18, 0.2, 0)
 		pile.add_child(count_label)
+
+func _show_middle_finger_emote(seat: int) -> void:
+	var avatar := seats[seat] as Node3D
+	if not avatar:
+		return
+	var anchor := avatar.get_node_or_null("Emote") as Node3D
+	if not anchor:
+		return
+	for child in anchor.get_children():
+		child.queue_free()
+	var hand := Node3D.new()
+	hand.name = "HiddenHand"
+	hand.set_meta("expires_at", time + 2.6)
+	hand.scale = Vector3(0.1, 0.1, 0.1)
+	anchor.add_child(hand)
+
+	var skin := Color("#f0c494")
+	var palm := _box(Vector3(0.24, 0.26, 0.09), skin)
+	palm.position = Vector3(0, 0.0, 0)
+	hand.add_child(palm)
+
+	var middle := _box(Vector3(0.075, 0.46, 0.07), skin.lightened(0.05))
+	middle.position = Vector3(0, 0.34, 0)
+	hand.add_child(middle)
+
+	for x in [-0.16, -0.08, 0.08, 0.16]:
+		var folded := _box(Vector3(0.065, 0.16, 0.065), skin.darkened(0.03))
+		folded.position = Vector3(x, 0.08, -0.02)
+		folded.rotation_degrees.z = 12.0 if x < 0 else -12.0
+		hand.add_child(folded)
+
+	var thumb := _box(Vector3(0.08, 0.2, 0.07), skin.darkened(0.02))
+	thumb.position = Vector3(-0.2, -0.01, 0)
+	thumb.rotation_degrees.z = 52.0
+	hand.add_child(thumb)
+
+	var label := Label3D.new()
+	label.text = "!"
+	label.font_size = 30
+	label.modulate = Color("#f0d28a")
+	label.outline_size = 4
+	label.outline_modulate = Color("#17110c")
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.position = Vector3(0.22, 0.58, 0)
+	hand.add_child(label)
+
+func _animate_emotes() -> void:
+	for avatar in seats:
+		if not avatar:
+			continue
+		var anchor := avatar.get_node_or_null("Emote") as Node3D
+		if not anchor:
+			continue
+		for child in anchor.get_children():
+			var expires := float(child.get_meta("expires_at", 0.0))
+			if expires > 0.0 and time > expires:
+				child.queue_free()
+				continue
+			var remaining := maxf(0.0, expires - time)
+			var appear := clampf(1.0 - remaining / 2.6, 0.0, 1.0)
+			var pop := minf(1.0, appear * 8.0)
+			child.scale = Vector3.ONE * (0.78 + pop * 0.42)
+			child.position.y = 0.05 + absf(sin(time * 6.0)) * 0.04
+			child.rotation_degrees = Vector3(-10.0, sin(time * 13.0) * 4.0, sin(time * 10.0) * 6.0)
 
 func _update_trick(table_state: Dictionary) -> void:
 	for child in trick_root.get_children():

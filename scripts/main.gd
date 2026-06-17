@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.8"
+const GAME_VERSION := "0.2.9"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -78,6 +78,7 @@ var version_warning := ""
 var advanced_network_visible := false
 var settings_visible := false
 var rules_visible := false
+var round_history_visible := false
 var last_sound_serial := 0
 
 var title_label: Label
@@ -100,6 +101,8 @@ var sfx_volume_label: Label
 var animal_picker: OptionButton
 var bot_personality_picker: OptionButton
 var rules_panel: PanelContainer
+var round_history_panel: PanelContainer
+var round_history_label: Label
 var settings_row: HBoxContainer
 var map_row: HBoxContainer
 var map_name_label: Label
@@ -144,6 +147,9 @@ func _ready() -> void:
 	_apply_command_line_mode()
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_I:
+		_request_hidden_emote()
+		return
 	if view_state.is_empty() or view_state.get("phase", "") != "playing":
 		_set_3d_card_hover(-1)
 		return
@@ -391,6 +397,29 @@ func _build_ui() -> void:
 	rules_text.add_theme_color_override("font_color", Color("#f7f1e3"))
 	rules_text.text = "How to play\nBid how many tricks you think you will win this round. Bids are secret until everyone locks in.\n\nYou must follow the led suit if you can. If you cannot, you may play any card. Trump cards beat other suits, and higher cards win within the same suit.\n\nHit your bid exactly to score 10 plus your bid. Miss your bid and score 0 for that round."
 	rules_margin.add_child(rules_text)
+
+	round_history_panel = PanelContainer.new()
+	round_history_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	round_history_panel.offset_left = 22
+	round_history_panel.offset_top = 132
+	round_history_panel.offset_right = 392
+	round_history_panel.offset_bottom = 520
+	round_history_panel.visible = false
+	round_history_panel.add_theme_stylebox_override("panel", _panel_style(Color("#16251ff0"), Color("#f0d28a66"), 8, 1))
+	add_child(round_history_panel)
+
+	var round_history_margin := MarginContainer.new()
+	round_history_margin.add_theme_constant_override("margin_left", 14)
+	round_history_margin.add_theme_constant_override("margin_top", 12)
+	round_history_margin.add_theme_constant_override("margin_right", 14)
+	round_history_margin.add_theme_constant_override("margin_bottom", 12)
+	round_history_panel.add_child(round_history_margin)
+
+	round_history_label = Label.new()
+	round_history_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	round_history_label.add_theme_font_size_override("font_size", 14)
+	round_history_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	round_history_margin.add_child(round_history_label)
 
 	settings_row = HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -821,6 +850,7 @@ func _create_client_waiting_view() -> void:
 		"winners": [],
 		"round_history": [],
 		"sound_event": {},
+		"emote_event": {},
 		"message": "Connecting to host...",
 	}
 	local_hand = []
@@ -861,6 +891,7 @@ func _create_lobby(message: String) -> void:
 		"winners": [],
 		"round_history": [],
 		"sound_event": {},
+		"emote_event": {},
 		"message": message,
 	}
 	_publish_state()
@@ -902,6 +933,7 @@ func _start_match(names: Array, max_cards: int) -> void:
 		"winners": [],
 		"round_history": [],
 		"sound_event": {},
+		"emote_event": {},
 		"message": "",
 	}
 	state["scores"].resize(names.size())
@@ -1009,7 +1041,10 @@ func _render() -> void:
 	if table_view_3d:
 		table_view_3d.set_table_state(view_state, my_seat)
 		table_view_3d.set_player_hand(local_hand)
+		if table_view_3d.has_method("set_emote_event"):
+			table_view_3d.set_emote_event(view_state.get("emote_event", {}))
 	_update_music()
+	_sync_round_history_visibility()
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":
@@ -1018,6 +1053,8 @@ func _render() -> void:
 		hand_box.visible = true
 		player_hud_panel.visible = false
 		right_info_frame.visible = false
+		round_history_visible = false
+		_sync_round_history_visibility()
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		table_label.text = view_state["message"]
@@ -1030,6 +1067,8 @@ func _render() -> void:
 		hand_box.visible = false
 		player_hud_panel.visible = false
 		right_info_frame.visible = false
+		round_history_visible = false
+		_sync_round_history_visibility()
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		_render_lobby()
@@ -1263,11 +1302,17 @@ func _render_actions() -> void:
 		waiting.add_theme_color_override("font_color", Color("#f7f1e3"))
 		action_box.add_child(waiting)
 
-	if _can_host_stop_game():
-		var stop_button := Button.new()
-		stop_button.text = "Stop Game"
-		stop_button.pressed.connect(_host_stop_game)
-		action_box.add_child(stop_button)
+	if view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end", "game_end"]:
+		var history_button := Button.new()
+		history_button.text = "Hide History" if round_history_visible else "Round History"
+		history_button.pressed.connect(_toggle_round_history)
+		action_box.add_child(history_button)
+
+	if _can_request_end_game():
+		var end_button := Button.new()
+		end_button.text = "End Game"
+		end_button.pressed.connect(_request_end_game)
+		action_box.add_child(end_button)
 
 func _render_hand() -> void:
 	var hand_signature := _hand_signature(local_hand)
@@ -1414,6 +1459,14 @@ func _lobby_host_name() -> String:
 			return str(view_state["names"][seat])
 	return "Waiting"
 
+func _table_host_seat_from_view() -> int:
+	if view_state.is_empty():
+		return -1
+	for seat in range(view_state["num_players"]):
+		if view_state["connected"][seat] and not (view_state.has("bots") and bool(view_state["bots"][seat])):
+			return seat
+	return -1
+
 func _play_again_count() -> int:
 	if not view_state.has("play_again"):
 		return 0
@@ -1422,6 +1475,44 @@ func _play_again_count() -> int:
 		if voted:
 			count += 1
 	return count
+
+func _toggle_round_history() -> void:
+	round_history_visible = not round_history_visible
+	_sync_round_history_visibility()
+	_play_sfx("click")
+
+func _sync_round_history_visibility() -> void:
+	if not round_history_panel:
+		return
+	var phase := str(view_state.get("phase", ""))
+	var can_show := phase in ["bidding", "playing", "trick_end", "round_end", "game_end"]
+	round_history_panel.visible = round_history_visible and can_show
+	if round_history_panel.visible and round_history_label:
+		round_history_label.text = _round_history_text()
+
+func _round_history_text() -> String:
+	var history: Array = view_state.get("round_history", [])
+	var names: Array = view_state.get("names", [])
+	if history.is_empty():
+		return "Round History\n\nNo completed rounds yet."
+	var text := "Round History\n"
+	for summary in history:
+		var round_number := int(summary.get("round_index", 0)) + 1
+		var bids: Array = summary.get("bids", [])
+		var tricks: Array = summary.get("tricks_won", [])
+		var deltas := GameRules.score_deltas(bids, tricks)
+		text += "\nRound %d\n" % round_number
+		for seat in range(min(names.size(), bids.size())):
+			var made := int(bids[seat]) == int(tricks[seat])
+			text += "%s: bid %d, took %d, %s" % [
+				str(names[seat]),
+				int(bids[seat]),
+				int(tricks[seat]),
+				"+%d" % int(deltas[seat]) if made else "miss",
+			]
+			if seat < names.size() - 1:
+				text += "\n"
+	return text
 
 func _selected_map_id() -> String:
 	return MAP_IDS[lobby_map_index % MAP_IDS.size()]
@@ -1469,6 +1560,35 @@ func _set_sound_event(name: String, seat := -1) -> void:
 	var serial := int(state.get("sound_serial", 0)) + 1
 	state["sound_serial"] = serial
 	state["sound_event"] = {"name": name, "serial": serial, "seat": seat}
+
+func _request_hidden_emote() -> void:
+	if view_state.is_empty():
+		return
+	if not (view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end", "game_end"]):
+		return
+	if my_seat < 0:
+		return
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_hidden_emote.rpc_id(1)
+	else:
+		_apply_hidden_emote(my_seat)
+
+@rpc("any_peer", "reliable")
+func _server_hidden_emote() -> void:
+	if not multiplayer.is_server():
+		return
+	_apply_hidden_emote(_seat_for_peer(multiplayer.get_remote_sender_id()))
+
+func _apply_hidden_emote(seat: int) -> void:
+	if state.is_empty() or seat < 0 or seat >= int(state.get("num_players", 0)):
+		return
+	if not (state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end", "game_end"]):
+		return
+	var serial := int(state.get("emote_serial", 0)) + 1
+	state["emote_serial"] = serial
+	state["emote_event"] = {"name": "middle_finger", "serial": serial, "seat": seat}
+	_set_sound_event("click", seat)
+	_publish_state()
 
 func _handle_sound_event(event) -> void:
 	if typeof(event) != TYPE_DICTIONARY:
@@ -2472,17 +2592,35 @@ func _fill_empty_seats_with_bots() -> void:
 	state["connected"] = _connected_seats()
 	state["ready"] = _lobby_ready_seats()
 
-func _can_host_stop_game() -> bool:
-	if not multiplayer.multiplayer_peer or not multiplayer.is_server():
+func _can_request_end_game() -> bool:
+	if view_state.is_empty():
 		return false
-	return view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
+	if not (view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]):
+		return false
+	if multiplayer.multiplayer_peer and multiplayer.is_server() and not dedicated_server:
+		return true
+	return my_seat == _table_host_seat_from_view()
 
-func _host_stop_game() -> void:
+func _request_end_game() -> void:
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_end_game.rpc_id(1)
+	else:
+		_apply_end_game_request(my_seat)
+
+@rpc("any_peer", "reliable")
+func _server_end_game() -> void:
 	if not multiplayer.is_server():
 		return
+	_apply_end_game_request(_seat_for_peer(multiplayer.get_remote_sender_id()))
+
+func _apply_end_game_request(seat: int) -> void:
 	if not (state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]):
 		return
-	_return_to_lobby("Game stopped by host. Ready up to start again.")
+	if dedicated_server and seat != _first_connected_human_seat():
+		return
+	if not dedicated_server and seat != 0:
+		return
+	_return_to_lobby("Game ended by table host. Ready up to start again.")
 
 func _request_play_again() -> void:
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
@@ -2554,6 +2692,7 @@ func _return_to_lobby(message: String) -> void:
 		"winners": [],
 		"round_history": [],
 		"sound_event": {},
+		"emote_event": {},
 		"message": message,
 	}
 	_publish_state()

@@ -18,6 +18,8 @@ The server is authoritative. Clients submit bids and card plays to the server, a
 - The first joined player can manage lobby settings on the dedicated server.
 - Rejoining with the same saved profile returns a player to their previous seat when possible.
 - Bot style can be set to Casual, Smart, or Ruthless from Settings.
+- Players can open an in-game round history panel during play.
+- The table host can end a running game and return everyone to the lobby.
 
 ## Current Online Server
 
