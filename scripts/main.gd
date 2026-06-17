@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.2"
+const GAME_VERSION := "0.2.3"
 const DEFAULT_SERVER_ADDRESS := "147.224.130.79:24567"
 const PUBLIC_LOBBIES := [
 	{"name": "Family Table", "address": "147.224.130.79:24567"},
@@ -10,6 +10,7 @@ const PUBLIC_LOBBIES := [
 ]
 const DEFAULT_MAX_CARDS := 7
 const DEFAULT_PLAYERS := 4
+const DEFAULT_MAP_ID := "living_room"
 const MAP_IDS := ["pirate", "space", "living_room", "jungle"]
 const MAP_NAMES := {
 	"pirate": "Pirate Ship",
@@ -22,6 +23,13 @@ const CardButtonScript := preload("res://scripts/card_button.gd")
 const FeltBackgroundScript := preload("res://scripts/felt_background.gd")
 const FireworksOverlayScript := preload("res://scripts/fireworks_overlay.gd")
 const TableView3DScript := preload("res://scripts/table_view_3d.gd")
+const MUSIC_PATHS := {
+	"menu": "res://assets/music/menu_theme.ogg",
+	"pirate": "res://assets/music/pirate_theme.ogg",
+	"space": "res://assets/music/space_theme.ogg",
+	"living_room": "res://assets/music/menu_theme.ogg",
+	"jungle": "res://assets/music/jungle_theme.ogg",
+}
 const SUIT_SYMBOLS := {"S": "♠", "H": "♥", "D": "♦", "C": "♣"}
 const SUIT_COLORS := {
 	"S": Color("#171717"),
@@ -37,7 +45,7 @@ var my_seat := 0
 var seat_peers: Array = []
 var lobby_player_count := DEFAULT_PLAYERS
 var lobby_max_cards := DEFAULT_MAX_CARDS
-var lobby_map_index := 0
+var lobby_map_index := MAP_IDS.find(DEFAULT_MAP_ID)
 var server_port := Net.DEFAULT_PORT
 var local_player_name := "Player"
 var local_profile_id := ""
@@ -84,6 +92,9 @@ var discovered_game_picker: OptionButton
 var discovered_games: Array = []
 var fireworks_overlay: Control
 var table_view_3d: Control
+var music_player: AudioStreamPlayer
+var music_streams := {}
+var current_music_key := ""
 
 func _ready() -> void:
 	rng.randomize()
@@ -125,6 +136,11 @@ func _build_ui() -> void:
 	table_view_3d = TableView3DScript.new()
 	table_view_3d.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(table_view_3d)
+
+	music_player = AudioStreamPlayer.new()
+	music_player.bus = "Music"
+	music_player.volume_db = -13.0
+	add_child(music_player)
 
 	fireworks_overlay = FireworksOverlayScript.new()
 	fireworks_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -542,6 +558,9 @@ func _create_offline_lobby() -> void:
 	my_seat = 0
 	seat_peers = _new_seat_peers(lobby_player_count)
 	_create_lobby("Offline preview. Host a game or join a host.")
+	state["menu_preview"] = true
+	view_state["menu_preview"] = true
+	_publish_state()
 	Net.start_discovery()
 
 func _create_client_waiting_view() -> void:
@@ -751,6 +770,7 @@ func _render() -> void:
 	if table_view_3d:
 		table_view_3d.set_table_state(view_state, my_seat)
 		table_view_3d.set_player_hand(local_hand)
+	_update_music()
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":
@@ -1149,6 +1169,39 @@ func _play_again_count() -> int:
 
 func _selected_map_id() -> String:
 	return MAP_IDS[lobby_map_index % MAP_IDS.size()]
+
+func _music_key_for_state() -> String:
+	if view_state.is_empty():
+		return "menu"
+	if bool(view_state.get("menu_preview", false)):
+		return "menu"
+	var phase := str(view_state.get("phase", ""))
+	if phase in ["connecting", "lobby", "game_end"]:
+		return "menu"
+	return str(view_state.get("map_id", DEFAULT_MAP_ID))
+
+func _update_music() -> void:
+	if not music_player:
+		return
+	var key := _music_key_for_state()
+	if key == current_music_key and music_player.playing:
+		return
+	current_music_key = key
+	var stream = _music_stream_for_key(key)
+	if not stream:
+		return
+	music_player.stream = stream
+	music_player.play()
+
+func _music_stream_for_key(key: String):
+	if music_streams.has(key):
+		return music_streams[key]
+	var path := str(MUSIC_PATHS.get(key, MUSIC_PATHS["menu"]))
+	var stream = AudioStreamOggVorbis.load_from_file(path)
+	if not stream and key != "menu":
+		stream = _music_stream_for_key("menu")
+	music_streams[key] = stream
+	return stream
 
 func _selected_map_name() -> String:
 	var map_id := _selected_map_id()

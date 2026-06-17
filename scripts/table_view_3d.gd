@@ -47,7 +47,7 @@ var look_yaw := 0.0
 var look_pitch := -10.0
 var hand_signature := ""
 var hovered_hand_index := -1
-var current_map_id := "pirate"
+var current_map_id := "landing"
 var table_felt_color := Color("#0b5a3f")
 var table_rail_color := Color("#7a4a28")
 var time := 0.0
@@ -102,7 +102,7 @@ func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	var players := int(table_state.get("num_players", 0))
 	if players <= 0:
 		return
-	var map_id := str(table_state.get("map_id", "pirate"))
+	var map_id := "landing" if bool(table_state.get("menu_preview", false)) else str(table_state.get("map_id", "living_room"))
 	if map_id != current_map_id:
 		_rebuild_map(map_id)
 	if players != seat_count:
@@ -216,8 +216,8 @@ func _build_world() -> void:
 	_rebuild_map(current_map_id)
 
 func _rebuild_map(map_id: String) -> void:
-	if not ["pirate", "space", "living_room", "jungle"].has(map_id):
-		map_id = "pirate"
+	if not ["landing", "pirate", "space", "living_room", "jungle"].has(map_id):
+		map_id = "living_room"
 	current_map_id = map_id
 	if ocean_root:
 		ocean_root.queue_free()
@@ -236,7 +236,9 @@ func _rebuild_map(map_id: String) -> void:
 	ship_root = Node3D.new()
 	world_root.add_child(ship_root)
 
-	if current_map_id == "space":
+	if current_map_id == "landing":
+		_build_landing_map()
+	elif current_map_id == "space":
 		_build_space_map()
 	elif current_map_id == "living_room":
 		_build_living_room_map()
@@ -312,6 +314,69 @@ func _build_pirate_map() -> void:
 	ship_root.add_child(flag_root)
 	_build_jolly_roger()
 
+	_attach_table_area()
+
+func _build_landing_map() -> void:
+	table_felt_color = Color("#256045")
+	table_rail_color = Color("#8a5c3b")
+	_set_world_colors(Color("#9dd2e3"), Color("#d8f0ef"), 1.12)
+	_build_ocean()
+
+	var shore := _box(Vector3(8.4, 0.18, 2.0), Color("#5f9b55"))
+	shore.position = Vector3(0, -0.22, -3.0)
+	ship_root.add_child(shore)
+	var road := _box(Vector3(1.0, 0.035, 2.25), Color("#9c9c8d"))
+	road.position = Vector3(-2.65, -0.08, -3.05)
+	ship_root.add_child(road)
+	var ferry_ramp := _box(Vector3(1.45, 0.08, 1.1), Color("#777c78"))
+	ferry_ramp.position = Vector3(-2.65, -0.03, -1.95)
+	ship_root.add_child(ferry_ramp)
+
+	var dock := _box(Vector3(5.8, 0.11, 0.54), Color("#7b5a3a"))
+	dock.position = Vector3(1.15, 0.02, -1.42)
+	ship_root.add_child(dock)
+	for i in range(7):
+		var post := _cylinder(0.055, 0.62, Color("#5c422b"))
+		post.position = Vector3(-1.2 + float(i) * 0.72, -0.18, -1.05)
+		ship_root.add_child(post)
+
+	var ferry := _box(Vector3(1.45, 0.32, 0.78), Color("#d8dedb"))
+	ferry.position = Vector3(-3.35, 0.08, -1.2)
+	ship_root.add_child(ferry)
+	var ferry_booth := _box(Vector3(0.5, 0.42, 0.38), Color("#c3d1d0"))
+	ferry_booth.position = Vector3(-3.35, 0.45, -1.2)
+	ship_root.add_child(ferry_booth)
+
+	var restaurant := _box(Vector3(2.35, 1.05, 1.0), Color("#43b8d8"))
+	restaurant.position = Vector3(1.25, 0.42, -2.18)
+	ship_root.add_child(restaurant)
+	var roof := _box(Vector3(2.65, 0.18, 1.18), Color("#dce8e7"))
+	roof.position = Vector3(1.25, 1.05, -2.18)
+	roof.rotation_degrees.z = 2
+	ship_root.add_child(roof)
+	var awning := _box(Vector3(1.8, 0.08, 0.48), Color("#37c7d8"))
+	awning.position = Vector3(2.0, 0.72, -1.52)
+	ship_root.add_child(awning)
+	for i in range(4):
+		var window := _box(Vector3(0.28, 0.28, 0.035), Color("#d9f7ff"))
+		window.position = Vector3(0.35 + float(i) * 0.42, 0.56, -1.66)
+		ship_root.add_child(window)
+	var sign := _cylinder(0.24, 0.055, Color("#1f6eb8"))
+	sign.position = Vector3(-0.15, 0.72, -1.64)
+	sign.rotation_degrees = Vector3(90, 0, 0)
+	ship_root.add_child(sign)
+
+	for i in range(8):
+		var trunk := _cylinder(0.06, 0.7, Color("#6f4b2f"))
+		trunk.position = Vector3(-3.6 + float(i) * 0.78, 0.15, -3.65)
+		ship_root.add_child(trunk)
+		var crown := _box(Vector3(0.55, 0.55, 0.55), Color("#4f8f48"))
+		crown.position = trunk.position + Vector3(0, 0.55, 0)
+		ship_root.add_child(crown)
+
+	var patio := _box(Vector3(4.5, 0.1, 2.6), Color("#9b744d"))
+	patio.position = Vector3(0.5, -0.04, 0.8)
+	ship_root.add_child(patio)
 	_attach_table_area()
 
 func _attach_table_area() -> void:
