@@ -1,5 +1,4 @@
 extends SubViewportContainer
-class_name TableView3D
 
 const AVATAR_COLORS := [
 	Color("#d26a3c"),
