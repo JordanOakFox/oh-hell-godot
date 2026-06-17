@@ -564,6 +564,7 @@ func _begin_round() -> void:
 	state["tricks_won"].resize(state["num_players"])
 	state["tricks_won"].fill(0)
 	state["trick"] = []
+	state["played_cards"] = []
 	state["led_suit"] = null
 	state["leader"] = (state["dealer"] + 1) % state["num_players"]
 	state["active_player"] = -1
@@ -1309,6 +1310,9 @@ func _apply_card(seat: int, card: Dictionary) -> void:
 	if state["trick"].is_empty():
 		state["led_suit"] = card["suit"]
 	state["trick"].append({"player": seat, "card": card})
+	if not state.has("played_cards"):
+		state["played_cards"] = []
+	state["played_cards"].append(card.duplicate(true))
 
 	if state["trick"].size() == state["num_players"]:
 		var winner := GameRules.trick_winner(state["trick"], state["led_suit"], state["trump"])
@@ -1433,31 +1437,28 @@ func _queue_bot_card(seat: int) -> void:
 func _bot_choose_bid(seat: int) -> int:
 	var hand: Array = state["hands"][seat]
 	var round_size: int = state["sequence"][state["round_index"]]
-	var likely_tricks := 0
+	var estimate := 0.0
 	for card in hand:
-		var rank := int(card["rank"])
-		if card["suit"] == state["trump"] and rank >= 10:
-			likely_tricks += 1
-		elif rank >= 13:
-			likely_tricks += 1
-		elif rank >= 11 and rng.randf() < 0.35:
-			likely_tricks += 1
-	if round_size > 1 and rng.randf() < 0.22:
-		likely_tricks += rng.randi_range(-1, 1)
-	return clampi(likely_tricks, 0, round_size)
+		estimate += _bot_bid_value(card, hand)
+	if round_size <= 2 and estimate > 0.65:
+		estimate += 0.15
+	elif round_size >= 5:
+		estimate -= 0.2
+	estimate += rng.randf_range(-0.28, 0.28)
+	return clampi(roundi(estimate), 0, round_size)
 
 func _bot_choose_card(seat: int) -> Dictionary:
 	var legal: Array = GameRules.legal_cards(state["hands"][seat], state["led_suit"])
 	if legal.is_empty():
 		return state["hands"][seat][0]
-	var wants_tricks := int(state["tricks_won"][seat]) < int(state["bids"][seat])
-	legal.sort_custom(func(a, b):
-		var a_power := _bot_card_power(a)
-		var b_power := _bot_card_power(b)
-		return a_power > b_power if wants_tricks else a_power < b_power
-	)
-	var limit = mini(legal.size() - 1, 1)
-	return legal[rng.randi_range(0, limit)]
+	var target: int = maxi(0, int(state["bids"][seat]) - int(state["tricks_won"][seat]))
+	var remaining_after_play: int = maxi(0, state["hands"][seat].size() - 1)
+	var must_chase: bool = target >= state["hands"][seat].size()
+	var wants_trick: bool = target > 0
+
+	if state["trick"].is_empty():
+		return _bot_choose_lead_card(legal, target, remaining_after_play, must_chase)
+	return _bot_choose_follow_card(legal, target, remaining_after_play, wants_trick, must_chase)
 
 func _bot_card_power(card: Dictionary) -> int:
 	var power := int(card["rank"])
@@ -1466,6 +1467,185 @@ func _bot_card_power(card: Dictionary) -> int:
 	elif state["led_suit"] != null and card["suit"] == state["led_suit"]:
 		power += 8
 	return power
+
+func _bot_bid_value(card: Dictionary, hand: Array) -> float:
+	var rank := int(card["rank"])
+	var threats := _bot_threat_count(card, hand)
+	var value := 0.0
+	if card["suit"] == state["trump"]:
+		value = 0.95 if threats == 0 else 0.78 if threats <= 1 else 0.52 if rank >= 11 else 0.28
+	else:
+		value = 0.82 if threats == 0 and rank >= 13 else 0.62 if threats <= 1 and rank >= 12 else 0.35 if rank >= 11 else 0.08
+		var lower_same := _bot_count_lower_owned_in_suit(card, hand)
+		value += minf(0.18, float(lower_same) * 0.06)
+	return clampf(value, 0.0, 1.0)
+
+func _bot_choose_lead_card(legal: Array, target: int, remaining_after_play: int, must_chase: bool) -> Dictionary:
+	var likely_winners := legal.filter(func(card): return _bot_lead_win_score(card) >= 0.62)
+	var safe_losers := legal.filter(func(card): return _bot_lead_win_score(card) < 0.42)
+	if must_chase:
+		return _bot_pick_highest(likely_winners if not likely_winners.is_empty() else legal)
+	if target <= 0:
+		return _bot_pick_safest_lead(safe_losers if not safe_losers.is_empty() else legal)
+	if target > remaining_after_play:
+		return _bot_pick_highest(likely_winners if not likely_winners.is_empty() else legal)
+	if not likely_winners.is_empty():
+		return _bot_pick_lowest_winner(likely_winners)
+	return _bot_pick_safest_lead(legal)
+
+func _bot_choose_follow_card(legal: Array, target: int, remaining_after_play: int, wants_trick: bool, must_chase: bool) -> Dictionary:
+	var winning := legal.filter(func(card): return _bot_beats_current_trick(card))
+	var losing := legal.filter(func(card): return not _bot_beats_current_trick(card))
+	var last_to_act := _players_after_active() == 0
+	if must_chase:
+		if winning.is_empty():
+			return _bot_pick_discard(losing if not losing.is_empty() else legal)
+		return _bot_pick_lowest_current_winner(winning) if last_to_act else _bot_pick_best_contested_winner(winning)
+	if wants_trick:
+		if winning.is_empty():
+			return _bot_pick_discard(losing if not losing.is_empty() else legal)
+		if target > remaining_after_play:
+			return _bot_pick_best_contested_winner(winning)
+		return _bot_pick_lowest_current_winner(winning)
+	if not losing.is_empty():
+		return _bot_pick_highest_loser(losing)
+	return _bot_pick_lowest_current_winner(winning)
+
+func _bot_pick_highest(cards: Array) -> Dictionary:
+	cards.sort_custom(func(a, b): return _bot_card_absolute_power(a) > _bot_card_absolute_power(b))
+	return _bot_pick_from_top(cards, 2)
+
+func _bot_pick_lowest_winner(cards: Array) -> Dictionary:
+	cards.sort_custom(func(a, b):
+		var a_score := _bot_lead_win_score(a)
+		var b_score := _bot_lead_win_score(b)
+		if absf(a_score - b_score) > 0.08:
+			return a_score < b_score
+		return _bot_card_absolute_power(a) < _bot_card_absolute_power(b)
+	)
+	return _bot_pick_from_top(cards, 2)
+
+func _bot_pick_safest_lead(cards: Array) -> Dictionary:
+	cards.sort_custom(func(a, b):
+		var a_score := _bot_lead_win_score(a)
+		var b_score := _bot_lead_win_score(b)
+		if absf(a_score - b_score) > 0.08:
+			return a_score < b_score
+		return _bot_card_absolute_power(a) < _bot_card_absolute_power(b)
+	)
+	return _bot_pick_from_top(cards, 2)
+
+func _bot_pick_lowest_current_winner(cards: Array) -> Dictionary:
+	cards.sort_custom(func(a, b): return _bot_card_absolute_power(a) < _bot_card_absolute_power(b))
+	return _bot_pick_from_top(cards, 2)
+
+func _bot_pick_best_contested_winner(cards: Array) -> Dictionary:
+	cards.sort_custom(func(a, b):
+		var a_risk := _bot_overtake_risk(a)
+		var b_risk := _bot_overtake_risk(b)
+		if absf(a_risk - b_risk) > 0.05:
+			return a_risk < b_risk
+		return _bot_card_absolute_power(a) < _bot_card_absolute_power(b)
+	)
+	return _bot_pick_from_top(cards, 2)
+
+func _bot_pick_highest_loser(cards: Array) -> Dictionary:
+	cards.sort_custom(func(a, b): return _bot_card_absolute_power(a) > _bot_card_absolute_power(b))
+	return _bot_pick_from_top(cards, 2)
+
+func _bot_pick_discard(cards: Array) -> Dictionary:
+	cards.sort_custom(func(a, b):
+		var a_safety := _bot_discard_priority(a)
+		var b_safety := _bot_discard_priority(b)
+		if a_safety != b_safety:
+			return a_safety < b_safety
+		return _bot_card_absolute_power(a) < _bot_card_absolute_power(b)
+	)
+	return _bot_pick_from_top(cards, 2)
+
+func _bot_pick_from_top(cards: Array, spread: int) -> Dictionary:
+	if cards.is_empty():
+		return {}
+	var limit: int = mini(cards.size() - 1, spread - 1)
+	return cards[rng.randi_range(0, limit)]
+
+func _bot_beats_current_trick(card: Dictionary) -> bool:
+	if state["trick"].is_empty():
+		return true
+	var best: Dictionary = state["trick"][0]
+	for play in state["trick"]:
+		if GameRules.beats(play["card"], best["card"], state["led_suit"], state["trump"]):
+			best = play
+	return GameRules.beats(card, best["card"], state["led_suit"], state["trump"])
+
+func _bot_lead_win_score(card: Dictionary) -> float:
+	var threats := _bot_threat_count(card, state["hands"][int(state["active_player"])])
+	var base := 1.0 - clampf(float(threats) / 5.0, 0.0, 0.95)
+	if card["suit"] == state["trump"]:
+		base += 0.18
+	elif _bot_count_unseen_suit(state["trump"]) > 0:
+		base -= 0.12
+	base += float(int(card["rank"]) - 8) * 0.035
+	return clampf(base, 0.0, 1.0)
+
+func _bot_overtake_risk(card: Dictionary) -> float:
+	var players_after := _players_after_active()
+	if players_after <= 0:
+		return 0.0
+	var threats := _bot_threat_count(card, state["hands"][int(state["active_player"])])
+	return clampf(float(threats * players_after) / 12.0, 0.0, 1.0)
+
+func _bot_discard_priority(card: Dictionary) -> int:
+	if state["led_suit"] != null and card["suit"] != state["led_suit"] and card["suit"] != state["trump"]:
+		return 0
+	if card["suit"] != state["trump"]:
+		return 1
+	return 2
+
+func _bot_card_absolute_power(card: Dictionary) -> int:
+	var power := int(card["rank"])
+	if card["suit"] == state["trump"]:
+		power += 100
+	return power
+
+func _bot_threat_count(card: Dictionary, own_hand: Array) -> int:
+	var threats := 0
+	for unseen in _bot_unseen_cards(own_hand):
+		if GameRules.beats(unseen, card, str(card["suit"]), state["trump"]):
+			threats += 1
+	return threats
+
+func _bot_count_unseen_suit(suit: String) -> int:
+	var count := 0
+	for card in _bot_unseen_cards(state["hands"][int(state["active_player"])]):
+		if card["suit"] == suit:
+			count += 1
+	return count
+
+func _bot_count_lower_owned_in_suit(card: Dictionary, hand: Array) -> int:
+	var count := 0
+	for owned in hand:
+		if owned["suit"] == card["suit"] and int(owned["rank"]) < int(card["rank"]):
+			count += 1
+	return count
+
+func _bot_unseen_cards(own_hand: Array) -> Array:
+	var cards := GameRules.build_deck()
+	var visible: Array = own_hand.duplicate(true)
+	visible.append_array(state.get("played_cards", []))
+	for play in state.get("trick", []):
+		visible.append(play["card"])
+	if state.get("trump_card", {}).has("suit"):
+		visible.append(state["trump_card"])
+	return cards.filter(func(card):
+		for seen in visible:
+			if GameRules.same_card(card, seen):
+				return false
+		return true
+	)
+
+func _players_after_active() -> int:
+	return maxi(0, int(state["num_players"]) - int(state["trick"].size()) - 1)
 
 func _record_round_history() -> void:
 	if not state.has("round_history"):
