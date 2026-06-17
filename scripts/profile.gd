@@ -64,10 +64,26 @@ func stats_line() -> String:
 		return "New profile"
 	return "%d games, %d wins, best %d" % [games, wins, best]
 
+func music_volume() -> float:
+	return clampf(float(data.get("music_volume", 0.7)), 0.0, 1.0)
+
+func set_music_volume(value: float) -> void:
+	data["music_volume"] = clampf(value, 0.0, 1.0)
+	save_profile()
+
+func music_muted() -> bool:
+	return bool(data.get("music_muted", false))
+
+func set_music_muted(muted: bool) -> void:
+	data["music_muted"] = muted
+	save_profile()
+
 func _default_profile() -> Dictionary:
 	return {
 		"id": _make_profile_id(),
 		"display_name": "Player",
+		"music_volume": 0.7,
+		"music_muted": false,
 		"games_played": 0,
 		"wins": 0,
 		"total_score": 0,

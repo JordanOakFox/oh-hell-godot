@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.3"
+const GAME_VERSION := "0.2.4"
 const DEFAULT_SERVER_ADDRESS := "147.224.130.79:24567"
 const PUBLIC_LOBBIES := [
 	{"name": "Family Table", "address": "147.224.130.79:24567"},
@@ -59,6 +59,7 @@ var hovered_3d_card_index := -1
 var dedicated_server := false
 var version_warning := ""
 var advanced_network_visible := false
+var settings_visible := false
 
 var title_label: Label
 var version_label: Label
@@ -69,6 +70,11 @@ var left_stats_label: Label
 var net_row: HBoxContainer
 var advanced_net_row: HBoxContainer
 var advanced_network_button: Button
+var mute_button: Button
+var settings_button: Button
+var settings_panel: PanelContainer
+var music_volume_slider: HSlider
+var music_volume_label: Label
 var settings_row: HBoxContainer
 var map_row: HBoxContainer
 var map_name_label: Label
@@ -138,9 +144,9 @@ func _build_ui() -> void:
 	add_child(table_view_3d)
 
 	music_player = AudioStreamPlayer.new()
-	music_player.bus = "Music"
-	music_player.volume_db = -13.0
+	music_player.bus = "Master"
 	add_child(music_player)
+	_apply_audio_settings()
 
 	fireworks_overlay = FireworksOverlayScript.new()
 	fireworks_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -199,6 +205,15 @@ func _build_ui() -> void:
 	advanced_network_button.pressed.connect(_on_advanced_network_pressed)
 	net_row.add_child(advanced_network_button)
 
+	mute_button = Button.new()
+	mute_button.pressed.connect(_on_mute_pressed)
+	net_row.add_child(mute_button)
+
+	settings_button = Button.new()
+	settings_button.text = "Settings"
+	settings_button.pressed.connect(_on_settings_pressed)
+	net_row.add_child(settings_button)
+
 	advanced_net_row = HBoxContainer.new()
 	advanced_net_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	advanced_net_row.visible = false
@@ -229,6 +244,45 @@ func _build_ui() -> void:
 	join_found_button.text = "Join LAN"
 	join_found_button.pressed.connect(_on_join_found_pressed)
 	advanced_net_row.add_child(join_found_button)
+
+	settings_panel = PanelContainer.new()
+	settings_panel.visible = false
+	settings_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	settings_panel.add_theme_stylebox_override("panel", _panel_style(Color("#16251fe8"), Color("#f0d28a66"), 8, 1))
+	root.add_child(settings_panel)
+
+	var settings_margin := MarginContainer.new()
+	settings_margin.add_theme_constant_override("margin_left", 14)
+	settings_margin.add_theme_constant_override("margin_top", 10)
+	settings_margin.add_theme_constant_override("margin_right", 14)
+	settings_margin.add_theme_constant_override("margin_bottom", 10)
+	settings_panel.add_child(settings_margin)
+
+	var settings_box := VBoxContainer.new()
+	settings_box.custom_minimum_size = Vector2(360, 0)
+	settings_box.add_theme_constant_override("separation", 8)
+	settings_margin.add_child(settings_box)
+
+	var settings_title := Label.new()
+	settings_title.text = "Settings"
+	settings_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	settings_title.add_theme_font_size_override("font_size", 18)
+	settings_title.add_theme_color_override("font_color", Color("#f0d28a"))
+	settings_box.add_child(settings_title)
+
+	music_volume_label = Label.new()
+	music_volume_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	settings_box.add_child(music_volume_label)
+
+	music_volume_slider = HSlider.new()
+	music_volume_slider.min_value = 0.0
+	music_volume_slider.max_value = 100.0
+	music_volume_slider.step = 1.0
+	music_volume_slider.value = Profile.music_volume() * 100.0
+	music_volume_slider.value_changed.connect(_on_music_volume_changed)
+	settings_box.add_child(music_volume_slider)
+
+	_update_audio_labels()
 
 	settings_row = HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -472,6 +526,40 @@ func _selected_public_lobby_address() -> String:
 func _on_advanced_network_pressed() -> void:
 	advanced_network_visible = not advanced_network_visible
 	_sync_advanced_network_visibility()
+
+func _on_settings_pressed() -> void:
+	settings_visible = not settings_visible
+	_sync_settings_visibility()
+
+func _sync_settings_visibility() -> void:
+	if settings_button:
+		settings_button.text = "Hide Settings" if settings_visible else "Settings"
+	if settings_panel:
+		var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
+		settings_panel.visible = settings_visible and not active_game
+
+func _on_mute_pressed() -> void:
+	Profile.set_music_muted(not Profile.music_muted())
+	_apply_audio_settings()
+
+func _on_music_volume_changed(value: float) -> void:
+	Profile.set_music_volume(value / 100.0)
+	if value > 0.0 and Profile.music_muted():
+		Profile.set_music_muted(false)
+	_apply_audio_settings()
+
+func _apply_audio_settings() -> void:
+	if not music_player:
+		return
+	var volume := Profile.music_volume()
+	music_player.volume_db = -80.0 if Profile.music_muted() or volume <= 0.0 else linear_to_db(volume)
+	_update_audio_labels()
+
+func _update_audio_labels() -> void:
+	if mute_button:
+		mute_button.text = "Unmute" if Profile.music_muted() else "Mute"
+	if music_volume_label:
+		music_volume_label.text = "Music Volume: %d%%" % roundi(Profile.music_volume() * 100.0)
 
 func _sync_advanced_network_visibility() -> void:
 	if advanced_network_button:
@@ -761,6 +849,7 @@ func _render() -> void:
 	if net_row:
 		net_row.visible = not active_game
 	_sync_advanced_network_visibility()
+	_sync_settings_visibility()
 	if settings_row:
 		settings_row.visible = not active_game
 	if map_row:
@@ -1197,7 +1286,11 @@ func _music_stream_for_key(key: String):
 	if music_streams.has(key):
 		return music_streams[key]
 	var path := str(MUSIC_PATHS.get(key, MUSIC_PATHS["menu"]))
-	var stream = AudioStreamOggVorbis.load_from_file(path)
+	var stream = load(path)
+	if not stream:
+		stream = AudioStreamOggVorbis.load_from_file(path)
+	if stream is AudioStreamOggVorbis:
+		stream.loop = true
 	if not stream and key != "menu":
 		stream = _music_stream_for_key("menu")
 	music_streams[key] = stream
