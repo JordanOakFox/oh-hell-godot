@@ -83,10 +83,14 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	time += delta
 	if ship_root:
-		var bob_strength := 0.06 if current_map_id == "pirate" else 0.018
-		ship_root.position.y = sin(time * 1.35) * bob_strength
-		ship_root.rotation_degrees.z = sin(time * 0.9) * (1.6 if current_map_id == "pirate" else 0.25)
-		ship_root.rotation_degrees.x = cos(time * 0.7) * (1.1 if current_map_id == "pirate" else 0.18)
+		if current_map_id == "pirate":
+			ship_root.position.y = sin(time * 1.35) * 0.06
+			ship_root.rotation_degrees.z = sin(time * 0.9) * 1.6
+			ship_root.rotation_degrees.x = cos(time * 0.7) * 1.1
+		else:
+			ship_root.position.y = 0.0
+			ship_root.rotation_degrees.z = 0.0
+			ship_root.rotation_degrees.x = 0.0
 	_animate_waves()
 	_animate_flag()
 	_animate_seats()
