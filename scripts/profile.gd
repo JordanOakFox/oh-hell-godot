@@ -1,6 +1,7 @@
 extends Node
 
 const SAVE_PATH := "user://profile.json"
+const ANIMALS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 
 var data: Dictionary = {}
 
@@ -40,6 +41,7 @@ func public_profile() -> Dictionary:
 	return {
 		"id": profile_id(),
 		"display_name": display_name(),
+		"animal": animal(),
 		"games_played": int(data.get("games_played", 0)),
 		"wins": int(data.get("wins", 0)),
 	}
@@ -78,10 +80,19 @@ func set_music_muted(muted: bool) -> void:
 	data["music_muted"] = muted
 	save_profile()
 
+func animal() -> String:
+	var selected := str(data.get("animal", "fox"))
+	return selected if ANIMALS.has(selected) else "fox"
+
+func set_animal(value: String) -> void:
+	data["animal"] = value if ANIMALS.has(value) else "fox"
+	save_profile()
+
 func _default_profile() -> Dictionary:
 	return {
 		"id": _make_profile_id(),
 		"display_name": "Player",
+		"animal": "fox",
 		"music_volume": 0.7,
 		"music_muted": false,
 		"games_played": 0,

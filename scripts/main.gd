@@ -1,7 +1,18 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.4"
+const GAME_VERSION := "0.2.5"
+const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
+const ANIMAL_NAMES := {
+	"bunny": "Bunny",
+	"lizard": "Lizard",
+	"lion": "Lion",
+	"tiger": "Tiger",
+	"bear": "Bear",
+	"fox": "Fox",
+	"dog": "Dog",
+	"cat": "Cat",
+}
 const DEFAULT_SERVER_ADDRESS := "147.224.130.79:24567"
 const PUBLIC_LOBBIES := [
 	{"name": "Family Table", "address": "147.224.130.79:24567"},
@@ -75,6 +86,7 @@ var settings_button: Button
 var settings_panel: PanelContainer
 var music_volume_slider: HSlider
 var music_volume_label: Label
+var animal_picker: OptionButton
 var settings_row: HBoxContainer
 var map_row: HBoxContainer
 var map_name_label: Label
@@ -281,6 +293,19 @@ func _build_ui() -> void:
 	music_volume_slider.value = Profile.music_volume() * 100.0
 	music_volume_slider.value_changed.connect(_on_music_volume_changed)
 	settings_box.add_child(music_volume_slider)
+
+	var animal_label := Label.new()
+	animal_label.text = "Animal"
+	animal_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	settings_box.add_child(animal_label)
+
+	animal_picker = OptionButton.new()
+	for animal_id in ANIMAL_IDS:
+		animal_picker.add_item(str(ANIMAL_NAMES.get(animal_id, animal_id.capitalize())))
+		animal_picker.set_item_metadata(animal_picker.item_count - 1, animal_id)
+	animal_picker.selected = max(ANIMAL_IDS.find(Profile.animal()), 0)
+	animal_picker.item_selected.connect(_on_animal_selected)
+	settings_box.add_child(animal_picker)
 
 	_update_audio_labels()
 
@@ -547,6 +572,12 @@ func _on_music_volume_changed(value: float) -> void:
 	if value > 0.0 and Profile.music_muted():
 		Profile.set_music_muted(false)
 	_apply_audio_settings()
+
+func _on_animal_selected(index: int) -> void:
+	if not animal_picker or index < 0:
+		return
+	Profile.set_animal(str(animal_picker.get_item_metadata(index)))
+	_update_local_profile_on_table()
 
 func _apply_audio_settings() -> void:
 	if not music_player:
@@ -1337,6 +1368,18 @@ func _read_local_profile_input() -> void:
 		local_player_name = "Player"
 	Profile.set_display_name(local_player_name)
 	local_player_name = Profile.display_name()
+	_update_local_profile_on_table()
+
+func _update_local_profile_on_table() -> void:
+	if state.is_empty():
+		return
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_register_profile.rpc_id(1, Profile.public_profile())
+		return
+	if my_seat >= 0 and my_seat < int(state.get("num_players", 0)):
+		state["profiles"][my_seat] = Profile.public_profile()
+		state["names"][my_seat] = Profile.display_name()
+		_publish_state()
 
 func _can_edit_lobby_settings() -> bool:
 	if not multiplayer.multiplayer_peer:
@@ -1364,10 +1407,8 @@ func _on_name_changed(new_text: String) -> void:
 		local_player_name = "Player"
 	Profile.set_display_name(local_player_name)
 	local_player_name = Profile.display_name()
-	if multiplayer.multiplayer_peer and multiplayer.is_server() and state.get("phase", "") == "lobby":
-		state["names"][0] = local_player_name
-		state["profiles"][0] = Profile.public_profile()
-		_publish_state()
+	if state.get("phase", "") == "lobby":
+		_update_local_profile_on_table()
 
 func _on_player_count_changed(value: float) -> void:
 	if not _can_edit_lobby_settings():
@@ -2030,6 +2071,7 @@ func _server_register_profile(profile: Dictionary) -> void:
 	state["profiles"][seat] = {
 		"id": str(profile.get("id", "")),
 		"display_name": state["names"][seat],
+		"animal": _clean_animal_id(str(profile.get("animal", "fox"))),
 		"games_played": int(profile.get("games_played", 0)),
 		"wins": int(profile.get("wins", 0)),
 	}
@@ -2105,6 +2147,7 @@ func _fill_empty_seats_with_bots() -> void:
 			state["profiles"][seat] = {
 				"id": "bot-%d" % seat,
 				"display_name": state["names"][seat],
+				"animal": ANIMAL_IDS[seat % ANIMAL_IDS.size()],
 				"games_played": 0,
 				"wins": 0,
 			}
@@ -2261,10 +2304,14 @@ func _default_profiles(count: int) -> Array:
 		profiles.append({
 			"id": "",
 			"display_name": "Player %d" % [i + 1],
+			"animal": ANIMAL_IDS[i % ANIMAL_IDS.size()],
 			"games_played": 0,
 			"wins": 0,
 		})
 	return profiles
+
+func _clean_animal_id(value: String) -> String:
+	return value if ANIMAL_IDS.has(value) else "fox"
 
 func _make_game_id() -> String:
 	return "%s-%d" % [Profile.profile_id(), Time.get_unix_time_from_system()]

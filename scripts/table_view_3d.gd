@@ -12,6 +12,16 @@ const AVATAR_COLORS := [
 	Color("#70c6c1"),
 	Color("#c95f52"),
 ]
+const ANIMAL_COLORS := {
+	"bunny": Color("#d8c4f0"),
+	"lizard": Color("#66b77a"),
+	"lion": Color("#d8a24a"),
+	"tiger": Color("#d9783f"),
+	"bear": Color("#8a6345"),
+	"fox": Color("#cf6f3a"),
+	"dog": Color("#a98560"),
+	"cat": Color("#8f8f9a"),
+}
 const SUIT_COLORS := {
 	"S": Color("#111111"),
 	"H": Color("#c8322b"),
@@ -569,10 +579,11 @@ func _rebuild_seats(players: int) -> void:
 		seat_base_rotations.append(rotation)
 		seat_moods.append("neutral")
 
-func _make_avatar(seat: int) -> Node3D:
+func _make_avatar(seat: int, animal := "fox") -> Node3D:
 	var root := Node3D.new()
 	root.name = "Seat%d" % seat
-	var color: Color = AVATAR_COLORS[seat % AVATAR_COLORS.size()]
+	root.set_meta("animal", animal)
+	var color: Color = ANIMAL_COLORS.get(animal, AVATAR_COLORS[seat % AVATAR_COLORS.size()])
 	var accent: Color = color.lightened(0.18)
 
 	var body := _box(Vector3(0.54, 0.62, 0.34), color)
@@ -585,16 +596,28 @@ func _make_avatar(seat: int) -> Node3D:
 	head.position = Vector3(0, 0.78, -0.03)
 	root.add_child(head)
 
-	var left_ear := _box(Vector3(0.15, 0.22, 0.12), accent.darkened(0.08))
-	left_ear.position = Vector3(-0.19, 1.09, -0.03)
+	var ear_size := _animal_ear_size(animal)
+	var left_ear := _box(ear_size, accent.darkened(0.08))
+	left_ear.position = Vector3(-0.19, 1.08 + ear_size.y * 0.45, -0.03)
+	left_ear.rotation_degrees.z = _animal_ear_tilt(animal)
 	root.add_child(left_ear)
-	var right_ear := _box(Vector3(0.15, 0.22, 0.12), accent.darkened(0.08))
-	right_ear.position = Vector3(0.19, 1.09, -0.03)
+	var right_ear := _box(ear_size, accent.darkened(0.08))
+	right_ear.position = Vector3(0.19, 1.08 + ear_size.y * 0.45, -0.03)
+	right_ear.rotation_degrees.z = -_animal_ear_tilt(animal)
 	root.add_child(right_ear)
 
-	var snout := _box(Vector3(0.24, 0.14, 0.14), Color("#f1d2a4"))
+	var snout := _box(_animal_snout_size(animal), Color("#f1d2a4"))
 	snout.position = Vector3(0, 0.76, -0.26)
 	root.add_child(snout)
+	if animal in ["lion", "tiger"]:
+		var mane := _box(Vector3(0.65, 0.12, 0.48), color.darkened(0.18))
+		mane.position = Vector3(0, 0.98, -0.02)
+		root.add_child(mane)
+	if animal == "lizard":
+		for i in range(3):
+			var crest := _box(Vector3(0.08, 0.13, 0.06), accent.lightened(0.16))
+			crest.position = Vector3(0, 1.05 + float(i) * 0.08, -0.04 + float(i) * 0.08)
+			root.add_child(crest)
 	var eye_l := _box(Vector3(0.055, 0.055, 0.035), Color("#101010"))
 	eye_l.position = Vector3(-0.11, 0.86, -0.25)
 	root.add_child(eye_l)
@@ -649,10 +672,45 @@ func _make_avatar(seat: int) -> Node3D:
 	root.add_child(active_marker)
 	return root
 
+func _animal_ear_size(animal: String) -> Vector3:
+	match animal:
+		"bunny":
+			return Vector3(0.13, 0.48, 0.11)
+		"bear":
+			return Vector3(0.18, 0.16, 0.13)
+		"lizard":
+			return Vector3(0.1, 0.12, 0.1)
+		"lion", "tiger", "fox", "cat":
+			return Vector3(0.16, 0.28, 0.11)
+		"dog":
+			return Vector3(0.16, 0.34, 0.1)
+	return Vector3(0.15, 0.22, 0.12)
+
+func _animal_ear_tilt(animal: String) -> float:
+	match animal:
+		"bunny":
+			return -4.0
+		"dog":
+			return 16.0
+		"fox", "cat", "lion", "tiger":
+			return -12.0
+	return 0.0
+
+func _animal_snout_size(animal: String) -> Vector3:
+	match animal:
+		"bear", "dog":
+			return Vector3(0.3, 0.17, 0.16)
+		"fox":
+			return Vector3(0.28, 0.13, 0.2)
+		"lizard":
+			return Vector3(0.34, 0.1, 0.16)
+	return Vector3(0.24, 0.14, 0.14)
+
 func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 	current_active = int(table_state.get("active_player", -1))
 	var names: Array = table_state.get("names", [])
 	var connected: Array = table_state.get("connected", [])
+	var profiles: Array = table_state.get("profiles", [])
 	var phase := str(table_state.get("phase", ""))
 	var bids: Array = table_state.get("bids", [])
 	var tricks: Array = table_state.get("tricks_won", [])
@@ -660,6 +718,18 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 	var submitted_bids: Array = table_state.get("bid_submitted", [])
 	for seat in range(min(seats.size(), seat_count)):
 		var avatar: Node3D = seats[seat]
+		var animal := "fox"
+		if seat < profiles.size() and typeof(profiles[seat]) == TYPE_DICTIONARY:
+			animal = str(profiles[seat].get("animal", "fox"))
+		if str(avatar.get_meta("animal", "")) != animal:
+			var rebuilt := _make_avatar(seat, animal)
+			rebuilt.position = avatar.position
+			rebuilt.rotation = avatar.rotation
+			seat_root.add_child(rebuilt)
+			seat_root.move_child(rebuilt, avatar.get_index())
+			seats[seat] = rebuilt
+			avatar.queue_free()
+			avatar = rebuilt
 		var label := avatar.get_node_or_null("Name") as Label3D
 		if label:
 			var name := "Seat %d" % (seat + 1)
