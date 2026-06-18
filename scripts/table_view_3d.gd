@@ -562,8 +562,8 @@ func _build_scoreboards() -> void:
 	scoreboard_root = Node3D.new()
 	scoreboard_root.name = "Scoreboards"
 	ship_root.add_child(scoreboard_root)
-	_make_scoreboard(Vector3(0, 1.03, -2.08), 180.0, "NorthScoreboard")
-	_make_scoreboard(Vector3(0, 1.03, 2.08), 0.0, "SouthScoreboard")
+	_make_scoreboard(Vector3(0, 1.32, -4.35), 180.0, "NorthScoreboard")
+	_make_scoreboard(Vector3(0, 1.32, 4.35), 0.0, "SouthScoreboard")
 
 func _make_scoreboard(position: Vector3, yaw_degrees: float, node_name: String) -> void:
 	var root := Node3D.new()
@@ -572,35 +572,35 @@ func _make_scoreboard(position: Vector3, yaw_degrees: float, node_name: String) 
 	root.rotation_degrees.y = yaw_degrees
 	scoreboard_root.add_child(root)
 
-	var post_left := _box(Vector3(0.055, 0.82, 0.055), Color("#2a1a12"))
+	var post_left := _box(Vector3(0.05, 0.72, 0.05), Color("#2a1a12"))
 	post_left.position = Vector3(-1.04, -0.18, 0.035)
 	root.add_child(post_left)
-	var post_right := _box(Vector3(0.055, 0.82, 0.055), Color("#2a1a12"))
+	var post_right := _box(Vector3(0.05, 0.72, 0.05), Color("#2a1a12"))
 	post_right.position = Vector3(1.04, -0.18, 0.035)
 	root.add_child(post_right)
 
-	var panel := _box(Vector3(2.18, 0.86, 0.08), Color("#10161b"))
+	var panel := _box(Vector3(1.86, 0.74, 0.07), Color("#10161b"))
 	panel.position = Vector3(0, 0.08, 0)
 	root.add_child(panel)
-	var trim_top := _box(Vector3(2.24, 0.045, 0.1), Color("#f0d28a"))
-	trim_top.position = Vector3(0, 0.535, -0.005)
+	var trim_top := _box(Vector3(1.92, 0.04, 0.09), Color("#f0d28a"))
+	trim_top.position = Vector3(0, 0.475, -0.005)
 	root.add_child(trim_top)
-	var trim_bottom := _box(Vector3(2.24, 0.045, 0.1), Color("#f0d28a"))
-	trim_bottom.position = Vector3(0, -0.375, -0.005)
+	var trim_bottom := _box(Vector3(1.92, 0.04, 0.09), Color("#f0d28a"))
+	trim_bottom.position = Vector3(0, -0.315, -0.005)
 	root.add_child(trim_bottom)
 
 	var label := Label3D.new()
 	label.name = "Text"
 	label.text = "Scoreboard"
-	label.font_size = 28
-	label.pixel_size = 0.006
+	label.font_size = 24
+	label.pixel_size = 0.005
 	label.modulate = Color("#fff6d8")
 	label.outline_size = 5
 	label.outline_modulate = Color("#000000")
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	label.no_depth_test = true
-	label.position = Vector3(-0.99, 0.43, -0.055)
+	label.position = Vector3(-0.84, 0.36, -0.05)
 	root.add_child(label)
 
 func _build_jolly_roger() -> void:

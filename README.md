@@ -19,6 +19,7 @@ The server is authoritative. Clients submit bids and card plays to the server, a
 - Rejoining with the same saved profile returns a player to their previous seat when possible.
 - Bot style can be set to Casual, Smart, or Ruthless from Settings.
 - Physical in-game scoreboards show each player's points, bid status, tricks, and turn marker on the table.
+- Scoreboards are positioned outside the player ring so they do not block the seated view.
 - Players can open an in-game round history panel during play.
 - The table host can end a running game and return everyone to the lobby.
 - `M` toggles all game audio, and Settings can mute SFX separately.
