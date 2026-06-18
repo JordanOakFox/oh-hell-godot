@@ -35,6 +35,17 @@ The public test server is:
 
 New client builds show named public lobbies. `Family Table` uses this address by default. For local testing, open `Advanced`, then replace the address with `127.0.0.1`.
 
+## Family Website
+
+The `website/` folder is a static Netlify site for family downloads, current version tracking, rules, and update suggestions. Netlify should use the repo root with:
+
+```text
+Build command: leave blank
+Publish directory: website
+```
+
+Suggestions are collected with Netlify Forms, and the public request checklist is curated in `website/requests.json`.
+
 ## Next Things To Build
 
 1. Add reconnect handling and explicit turn timers.

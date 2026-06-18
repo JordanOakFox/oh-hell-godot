@@ -1,0 +1,26 @@
+[
+  {
+    "title": "Cleaner tab scoreboard",
+    "requestedBy": "Jordan",
+    "status": "done",
+    "note": "Added in v0.2.16 with a cleaner panel and personal turn prompt."
+  },
+  {
+    "title": "Family download hub",
+    "requestedBy": "Jordan",
+    "status": "done",
+    "note": "This website points everyone to the latest Google Drive builds."
+  },
+  {
+    "title": "Steam-ready polish",
+    "requestedBy": "Jordan",
+    "status": "planned",
+    "note": "Ongoing UI, rules, packaging, and quality-of-life work."
+  },
+  {
+    "title": "Better game invite flow",
+    "requestedBy": "Jordan",
+    "status": "planned",
+    "note": "Long-term goal: make joining games feel less like typing server details."
+  }
+]

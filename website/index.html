@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Family hub for the Oh Hell multiplayer card game. Check the current version, download the latest build, read rules, and submit update ideas.">
+  <title>Oh Hell Family Game Hub</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="hero">
+    <div class="topbar">
+      <a class="brand" href="/">
+        <img src="/assets/app_icon.png" alt="Oh Hell game icon">
+        <span>Oh Hell</span>
+      </a>
+      <nav aria-label="Main navigation">
+        <a href="#download">Download</a>
+        <a href="#updates">Updates</a>
+        <a href="#suggest">Suggest</a>
+        <a href="#rules">Rules</a>
+      </nav>
+    </div>
+
+    <div class="hero-content">
+      <div>
+        <p class="eyebrow">Family build hub</p>
+        <h1>Grab the right copy before game night.</h1>
+        <p class="hero-copy">This page tracks the current version, links to the shared Google Drive folder, and collects family update ideas in one place.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://drive.google.com/drive/folders/1PFhUlWYDqUyYS61y7e3zx_GK4CX1uJA2?usp=sharing">Open Google Drive Downloads</a>
+          <a class="button secondary" href="#suggest">Send an Idea</a>
+        </div>
+      </div>
+
+      <aside class="version-card" aria-labelledby="current-version">
+        <p class="eyebrow">Current version</p>
+        <h2 id="current-version" class="version-number">v0.2.16</h2>
+        <p>Use this version unless Jordan says a newer one is ready.</p>
+        <dl>
+          <dt>Windows</dt>
+          <dd>OhHell-Windows-v0.2.16.zip</dd>
+          <dt>macOS</dt>
+          <dd>OhHell-macOS-v0.2.16.zip</dd>
+          <dt>Server</dt>
+          <dd>147.224.130.79</dd>
+        </dl>
+        <p class="mini-note">Last updated: June 18, 2026</p>
+      </aside>
+    </div>
+
+    <div class="ship" aria-hidden="true">
+      <div class="hull"></div>
+      <div class="deck"></div>
+      <div class="sail"></div>
+    </div>
+  </header>
+
+  <main>
+    <section id="download" class="section">
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Download</p>
+          <h2>One place for the newest builds.</h2>
+          <p>Open the Drive folder, choose the file for your computer, unzip it, and run the game.</p>
+        </div>
+      </div>
+
+      <div class="download-panel">
+        <article class="panel">
+          <h3>Latest build files</h3>
+          <p>The folder should contain the newest Windows and macOS zips. Match the version number on this page before downloading.</p>
+          <div class="card-actions">
+            <a class="button primary" href="https://drive.google.com/drive/folders/1PFhUlWYDqUyYS61y7e3zx_GK4CX1uJA2?usp=sharing">Open Google Drive</a>
+          </div>
+          <div class="pill-row" aria-label="Current build files">
+            <span class="pill">Windows v0.2.16</span>
+            <span class="pill">macOS v0.2.16</span>
+            <span class="pill">Crossplay ready</span>
+          </div>
+        </article>
+
+        <article class="panel">
+          <h3>Quick connect</h3>
+          <ol>
+            <li>Open the newest game build.</li>
+            <li>Pick your name and animal.</li>
+            <li>Choose a public lobby or connect to the family server.</li>
+            <li>Ready up when everyone is in.</li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <section id="updates" class="section">
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Update board</p>
+          <h2>Requests, plans, and finished ideas.</h2>
+          <p>Submitted ideas arrive in Netlify. The public board below is the curated checklist Jordan can update when an idea is accepted or finished.</p>
+        </div>
+      </div>
+
+      <div class="request-board" data-request-board>
+        <p>Loading update board...</p>
+      </div>
+    </section>
+
+    <section id="suggest" class="section">
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Suggestions</p>
+          <h2>Send an update request.</h2>
+          <p>Ideas can be tiny, practical, silly, or wildly ambitious. The best ones may get moved onto the public update board.</p>
+        </div>
+      </div>
+
+      <form class="panel suggestion-form" name="update-suggestion" method="POST" action="/thanks.html" data-netlify="true">
+        <input type="hidden" name="form-name" value="update-suggestion">
+        <div class="form-grid">
+          <label>
+            Your name
+            <input name="name" autocomplete="name" required>
+          </label>
+          <label>
+            Category
+            <select name="category" required>
+              <option value="">Pick one</option>
+              <option>Bug</option>
+              <option>Quality of life</option>
+              <option>Art or sound</option>
+              <option>Rules</option>
+              <option>Big idea</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Request title
+          <input name="title" maxlength="90" required>
+        </label>
+        <label>
+          What should change?
+          <textarea name="message" rows="6" required></textarea>
+        </label>
+        <label>
+          How important is it?
+          <select name="priority">
+            <option>Nice to have</option>
+            <option>Would make the game easier</option>
+            <option>Blocks me from playing</option>
+          </select>
+        </label>
+        <button class="button primary" type="submit">Submit Suggestion</button>
+      </form>
+    </section>
+
+    <section id="rules" class="section">
+      <div class="section-header">
+        <div>
+          <p class="eyebrow">Rules</p>
+          <h2>How Oh Hell works.</h2>
+          <p>The goal is to predict exactly how many tricks you will win each round.</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <article class="panel">
+          <h3>1. Deal and trump</h3>
+          <ul>
+            <li>Each round deals a set number of cards.</li>
+            <li>After dealing, the next card from the deck sets trump.</li>
+            <li>Trump cards beat non-trump cards.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <h3>2. Secret bidding</h3>
+          <ul>
+            <li>Everyone bids how many tricks they think they can win.</li>
+            <li>Bids are hidden until all players lock in.</li>
+            <li>Your goal is to match your bid exactly.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <h3>3. Playing tricks</h3>
+          <ul>
+            <li>The leader plays any card.</li>
+            <li>Everyone else must follow suit if they can.</li>
+            <li>The trick winner leads the next trick.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <h3>4. Scoring</h3>
+          <ul>
+            <li>If you make your bid, you score points.</li>
+            <li>If you miss your bid, you do not get the bid bonus.</li>
+            <li>Highest score at the end wins.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <h3>Table controls</h3>
+          <ul>
+            <li>Press Tab to toggle the scoreboard.</li>
+            <li>Press M to mute or unmute audio.</li>
+            <li>Right-click and drag to look around the table.</li>
+          </ul>
+        </article>
+
+        <article class="panel">
+          <h3>Current fun stuff</h3>
+          <ul>
+            <li>Animal avatars.</li>
+            <li>Pirate ship, living room, jungle, and space maps.</li>
+            <li>Bots can fill empty seats for practice.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Oh Hell family build hub. Keep your copy updated before playing.</p>
+  </footer>
+</body>
+</html>
