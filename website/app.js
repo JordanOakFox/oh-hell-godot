@@ -46,6 +46,23 @@ fetch("/requests.json")
     }
   });
 
+fetch("/version.json")
+  .then(response => response.json())
+  .then(version => {
+    const setText = (selector, value) => {
+      const element = document.querySelector(selector);
+      if (element && value) element.textContent = value;
+    };
+    setText("[data-current-version]", version.version);
+    setText("[data-windows-build]", version.windowsBuild);
+    setText("[data-macos-build]", version.macosBuild);
+    setText("[data-server-address]", version.serverAddress);
+    setText("[data-last-updated]", `Last updated: ${version.lastUpdated}`);
+    setText("[data-windows-pill]", `Windows ${version.version}`);
+    setText("[data-macos-pill]", `macOS ${version.version}`);
+  })
+  .catch(() => {});
+
 const suggestionForm = document.querySelector("[data-suggestion-form]");
 const formStatus = document.querySelector("[data-form-status]");
 

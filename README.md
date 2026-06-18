@@ -44,7 +44,7 @@ Build command: leave blank
 Publish directory: website
 ```
 
-Suggestions are collected with Netlify Forms, and the public request checklist is curated in `website/requests.json`.
+Suggestions are collected with Netlify Forms. The public request checklist is curated in `website/requests.json`, and the current public build is tracked in `website/version.json`.
 
 ## Next Things To Build
 

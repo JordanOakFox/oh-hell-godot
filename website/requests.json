@@ -1,9 +1,9 @@
 [
   {
-    "title": "Cleaner tab scoreboard",
+    "title": "Cleaner table UI and prompts",
     "requestedBy": "Jordan",
     "status": "done",
-    "note": "Added in v0.2.16 with a cleaner panel and personal turn prompt."
+    "note": "Added in v0.2.17 with cleaner lobby text, gameplay prompts, and round history."
   },
   {
     "title": "Family download hub",

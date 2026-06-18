@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.16"
+const GAME_VERSION := "0.2.17"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -1208,7 +1208,7 @@ func _render() -> void:
 	_render_trump_symbol()
 	if player_hud_panel.visible:
 		left_stats_label.text = _scoreboard_text()
-	table_label.text = view_state["message"]
+	table_label.text = _game_prompt_text()
 
 	_render_trick()
 	_render_actions()
@@ -1223,7 +1223,7 @@ func _render_game_end() -> void:
 
 	var text := "%s\n\nFinal Leaderboard\n" % winner_text
 	for row in view_state["standings"]:
-		text += "%d. %s  %d pts  |  made %d, missed %d  |  best +%d\n" % [
+		text += "%d. %s  |  %d pts  |  exact %d  |  missed %d  |  best +%d\n" % [
 			int(row["place"]),
 			row["name"],
 			int(row["score"]),
@@ -1231,7 +1231,7 @@ func _render_game_end() -> void:
 			int(row.get("missed", 0)),
 			int(row.get("best_round", 0)),
 		]
-	text += "\n%s" % view_state["message"]
+	text += "\nPress Play Again when everyone wants another table.\n%s" % view_state["message"]
 	left_stats_label.text = ""
 	right_info_label.text = ""
 	table_label.add_theme_font_size_override("font_size", 22)
@@ -1279,22 +1279,33 @@ func _render_lobby() -> void:
 	left_stats_label.text = ""
 	right_info_label.text = ""
 	table_label.add_theme_font_size_override("font_size", 16)
-	var table_host := "Table Host: %s\n" % _lobby_host_name()
+	var connected_count := _view_connected_count()
+	var ready_count := 0
+	for seat in range(view_state["num_players"]):
+		var is_bot := view_state.has("bots") and bool(view_state["bots"][seat])
+		if is_bot or (view_state["connected"][seat] and view_state["ready"][seat]):
+			ready_count += 1
 	var text := "Multiplayer Lobby\n\n"
-	text += "%s" % table_host
-	text += "Setup: %d players, %d max cards, %s\n" % [
+	text += "Table Host: %s\n" % _lobby_host_name()
+	text += "Table: %d players  |  %d max cards  |  %s\n" % [
 		view_state["num_players"],
 		view_state["max_cards"],
 		MAP_NAMES.get(str(view_state.get("map_id", _selected_map_id())), _selected_map_name()),
 	]
-	text += "Bots: %s\n" % str(BOT_PERSONALITY_NAMES.get(str(view_state.get("bot_personality", "smart")), "Smart"))
-	text += "You are seat %d: %s\n" % [my_seat + 1, view_state["names"][my_seat]]
+	text += "Bots: %s  |  Ready: %d / %d  |  Connected: %d / %d\n" % [
+		str(BOT_PERSONALITY_NAMES.get(str(view_state.get("bot_personality", "smart")), "Smart")),
+		ready_count,
+		view_state["num_players"],
+		connected_count,
+		view_state["num_players"],
+	]
+	text += "You: Seat %d, %s\n" % [my_seat + 1, view_state["names"][my_seat]]
 	if multiplayer.multiplayer_peer and multiplayer.is_server():
 		var addresses := Net.local_join_addresses(server_port)
 		if addresses.is_empty():
-			text += "Join: local network IP not found\n"
+			text += "Local join: network IP not found\n"
 		else:
-			text += "Join: %s\n" % ", ".join(addresses)
+			text += "Local join: %s\n" % ", ".join(addresses)
 	text += "\nSeats\n"
 	for i in range(view_state["num_players"]):
 		var status := "waiting"
@@ -1302,14 +1313,25 @@ func _render_lobby() -> void:
 			status = "bot"
 		elif view_state["connected"][i]:
 			status = "ready" if view_state["ready"][i] else "not ready"
-		text += "%d. %s - %s\n" % [i + 1, view_state["names"][i], status]
+		var host_badge := " host" if i == _table_host_seat_from_view() else ""
+		var you_badge := " you" if i == my_seat else ""
+		text += "%2d. %-18s %s%s%s\n" % [i + 1, str(view_state["names"][i]), status, host_badge, you_badge]
 	if not version_warning.is_empty():
-		text += "%s\n" % version_warning
-	text += "\n%s" % view_state["message"]
+		text += "\n%s\n" % version_warning
+	text += "\n%s" % _lobby_help_text()
+	if not str(view_state["message"]).is_empty():
+		text += "\n\n%s" % view_state["message"]
 	table_label.text = text
 	_render_trick()
 	_render_actions()
 	_render_hand()
+
+func _lobby_help_text() -> String:
+	if _view_lobby_can_start():
+		return "Everyone is ready. Start Game when the table is set."
+	if view_state["connected"][my_seat] and not view_state["ready"][my_seat]:
+		return "Pick your settings, then press Ready."
+	return "Waiting for seats to fill and players to ready up."
 
 func _render_trick() -> void:
 	for child in trick_box.get_children():
@@ -1617,6 +1639,29 @@ func _sync_turn_banner() -> void:
 	turn_banner_panel.modulate = Color.WHITE
 	turn_banner_label.text = text
 
+func _game_prompt_text() -> String:
+	var phase := str(view_state.get("phase", ""))
+	if phase == "bidding":
+		var submitted: Array = view_state.get("bid_submitted", [])
+		if my_seat < submitted.size() and not bool(submitted[my_seat]):
+			return "Choose your bid. Your bid stays hidden until everyone locks in."
+		return "%s\nWaiting for the rest of the table." % str(view_state.get("message", ""))
+	if phase == "playing":
+		var active := int(view_state.get("active_player", -1))
+		if active == my_seat:
+			var led := str(view_state.get("led_suit", ""))
+			if led.is_empty():
+				return "Your turn. Lead the trick with any legal card."
+			return "Your turn. Follow %s if you can." % GameRules.SUIT_NAMES.get(led, led)
+		var names: Array = view_state.get("names", [])
+		if active >= 0 and active < names.size():
+			return "Waiting for %s to play." % str(names[active])
+	if phase == "trick_end":
+		return "%s\nNext trick starts automatically." % str(view_state.get("message", ""))
+	if phase == "round_end":
+		return "%s\nReview the round, then continue." % str(view_state.get("message", ""))
+	return str(view_state.get("message", ""))
+
 func _sync_round_history_visibility() -> void:
 	if not round_history_panel:
 		return
@@ -1705,10 +1750,14 @@ func _round_history_text() -> String:
 		var bids: Array = summary.get("bids", [])
 		var tricks: Array = summary.get("tricks_won", [])
 		var deltas := GameRules.score_deltas(bids, tricks)
-		text += "\nRound %d\n" % round_number
+		var exact_count := 0
+		for seat in range(min(names.size(), bids.size())):
+			if int(bids[seat]) == int(tricks[seat]):
+				exact_count += 1
+		text += "\nRound %d  |  exact bids: %d / %d\n" % [round_number, exact_count, min(names.size(), bids.size())]
 		for seat in range(min(names.size(), bids.size())):
 			var made := int(bids[seat]) == int(tricks[seat])
-			text += "%s: bid %d, took %d, %s" % [
+			text += "%-16s bid %d, took %d, %s" % [
 				str(names[seat]),
 				int(bids[seat]),
 				int(tricks[seat]),
