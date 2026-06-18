@@ -72,7 +72,7 @@ if (suggestionForm) {
     })
       .then(response => {
         if (!response.ok) {
-          throw new Error("Form submission failed");
+          throw new Error(`Form submission failed with status ${response.status}`);
         }
         suggestionForm.reset();
         if (formStatus) {
@@ -80,9 +80,9 @@ if (suggestionForm) {
           formStatus.className = "form-status success";
         }
       })
-      .catch(() => {
+      .catch(error => {
         if (formStatus) {
-          formStatus.textContent = "That did not send. Try again, or text Jordan the idea for now.";
+          formStatus.textContent = `That did not send (${error.message}). Try again, or text Jordan the idea for now.`;
           formStatus.className = "form-status error";
         }
       })

@@ -9,6 +9,16 @@
   <script src="/app.js" defer></script>
 </head>
 <body>
+  <form name="update-suggestion" method="POST" data-netlify="true" netlify netlify-honeypot="bot-field" hidden>
+    <input type="hidden" name="form-name" value="update-suggestion">
+    <input name="bot-field">
+    <input name="name">
+    <input name="category">
+    <input name="title">
+    <textarea name="message"></textarea>
+    <input name="priority">
+  </form>
+
   <header class="hero">
     <div class="topbar">
       <a class="brand" href="/">
@@ -116,7 +126,7 @@
         </div>
       </div>
 
-      <form class="panel suggestion-form" name="update-suggestion" method="POST" action="/thanks/" data-netlify="true" netlify netlify-honeypot="bot-field" data-suggestion-form>
+      <form class="panel suggestion-form" method="POST" action="/" data-suggestion-form>
         <input type="hidden" name="form-name" value="update-suggestion">
         <p class="hidden-field">
           <label>Do not fill this out if you are human: <input name="bot-field"></label>
