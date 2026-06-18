@@ -850,7 +850,7 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 				var ready: Array = table_state.get("ready", [])
 				lobby_status.text = "ready" if seat < ready.size() and bool(ready[seat]) else "not ready"
 				lobby_status.modulate = Color("#93df9d") if seat < ready.size() and bool(ready[seat]) else Color("#fff6d8")
-			avatar.visible = seat >= connected.size() or bool(connected[seat])
+			avatar.visible = seat != my_seat and (seat >= connected.size() or bool(connected[seat]))
 			seat_moods[seat] = "neutral"
 			continue
 		var score_label := avatar.get_node_or_null("Score") as Label3D
@@ -1108,7 +1108,7 @@ func _update_lobby_walk(delta: float) -> void:
 	input = input.normalized()
 	var yaw_radians := deg_to_rad(lobby_walk_yaw)
 	var forward := Vector3(-sin(yaw_radians), 0, -cos(yaw_radians)).normalized()
-	var right := Vector3(forward.z, 0, -forward.x).normalized()
+	var right := Vector3(-forward.z, 0, forward.x).normalized()
 	var movement := (forward * -input.z + right * input.x).normalized()
 	lobby_walk_position += movement * delta * 2.15
 	lobby_avatar_yaw = rad_to_deg(atan2(-movement.x, -movement.z))

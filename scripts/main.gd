@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.19"
+const GAME_VERSION := "0.2.20"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -107,6 +107,7 @@ var animal_picker: OptionButton
 var bot_personality_picker: OptionButton
 var rules_panel: PanelContainer
 var history_button: Button
+var end_game_button: Button
 var turn_banner_panel: PanelContainer
 var turn_banner_label: Label
 var round_history_panel: PanelContainer
@@ -456,6 +457,18 @@ func _build_ui() -> void:
 	_style_command_button(history_button)
 	history_button.pressed.connect(_toggle_round_history)
 	add_child(history_button)
+
+	end_game_button = Button.new()
+	end_game_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	end_game_button.offset_left = 18
+	end_game_button.offset_top = 128
+	end_game_button.offset_right = 132
+	end_game_button.offset_bottom = 162
+	end_game_button.text = "End Game"
+	end_game_button.visible = false
+	_style_command_button(end_game_button)
+	end_game_button.pressed.connect(_request_end_game)
+	add_child(end_game_button)
 
 	turn_banner_panel = PanelContainer.new()
 	turn_banner_panel.anchor_left = 0.5
@@ -1207,6 +1220,8 @@ func _render() -> void:
 	if history_button:
 		history_button.visible = overlay_phase
 		history_button.text = "Hide History" if round_history_visible else "History"
+	if end_game_button:
+		end_game_button.visible = _can_request_end_game()
 	_sync_scoreboard_visibility()
 	_sync_round_history_visibility()
 	_sync_turn_banner()
@@ -1492,13 +1507,6 @@ func _render_actions() -> void:
 		waiting.add_theme_color_override("font_color", Color("#f7f1e3"))
 		action_box.add_child(waiting)
 
-	if _can_request_end_game():
-		var end_button := Button.new()
-		end_button.text = "End Game"
-		_style_command_button(end_button)
-		end_button.pressed.connect(_request_end_game)
-		action_box.add_child(end_button)
-
 func _render_hand() -> void:
 	var hand_signature := _hand_signature(local_hand)
 
@@ -1525,7 +1533,7 @@ func _set_3d_card_hover(index: int) -> void:
 		table_view_3d.set_hovered_hand_index(index)
 
 func _mouse_over_command_ui(position: Vector2) -> bool:
-	for control in [action_box, history_button, player_hud_panel, round_history_panel, name_input, online_lobby_picker, advanced_network_button, mute_button, settings_button, rules_button, settings_panel, rules_panel, address_input, player_count_spin, max_cards_spin, discovered_game_picker, bot_personality_picker]:
+	for control in [action_box, history_button, end_game_button, player_hud_panel, round_history_panel, name_input, online_lobby_picker, advanced_network_button, mute_button, settings_button, rules_button, settings_panel, rules_panel, address_input, player_count_spin, max_cards_spin, discovered_game_picker, bot_personality_picker]:
 		if control and control.visible:
 			var rect := Rect2(control.global_position, control.size)
 			if rect.has_point(position):
@@ -1715,7 +1723,10 @@ func _game_prompt_text() -> String:
 	if phase == "playing":
 		var active := int(view_state.get("active_player", -1))
 		if active == my_seat:
-			var led := str(view_state.get("led_suit", ""))
+			var led_value = view_state.get("led_suit", null)
+			if led_value == null:
+				return "Your turn. Lead the trick with any legal card."
+			var led := str(led_value)
 			if led.is_empty():
 				return "Your turn. Lead the trick with any legal card."
 			return "Your turn. Follow %s if you can." % GameRules.SUIT_NAMES.get(led, led)
