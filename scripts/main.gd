@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.11"
+const GAME_VERSION := "0.2.12"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -407,10 +407,10 @@ func _build_ui() -> void:
 	rules_margin.add_child(rules_text)
 
 	round_history_panel = PanelContainer.new()
-	round_history_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	round_history_panel.offset_left = 22
+	round_history_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	round_history_panel.offset_left = -392
 	round_history_panel.offset_top = 132
-	round_history_panel.offset_right = 392
+	round_history_panel.offset_right = -22
 	round_history_panel.offset_bottom = 520
 	round_history_panel.visible = false
 	round_history_panel.add_theme_stylebox_override("panel", _panel_style(Color("#16251ff0"), Color("#f0d28a66"), 8, 1))
@@ -501,13 +501,13 @@ func _build_ui() -> void:
 	root.add_child(play_row)
 
 	player_hud_panel = PanelContainer.new()
-	player_hud_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	player_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	player_hud_panel.offset_left = 18
-	player_hud_panel.offset_top = -92
-	player_hud_panel.offset_right = 248
-	player_hud_panel.offset_bottom = -18
+	player_hud_panel.offset_top = 118
+	player_hud_panel.offset_right = 342
+	player_hud_panel.offset_bottom = 462
 	player_hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	player_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color("#16251fd8"), Color("#f0d28a66"), 8, 1))
+	player_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color("#111a20eb"), Color("#f0d28aaa"), 8, 2))
 	player_hud_panel.visible = false
 	add_child(player_hud_panel)
 
@@ -520,8 +520,11 @@ func _build_ui() -> void:
 
 	left_stats_label = Label.new()
 	left_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	left_stats_label.add_theme_font_size_override("font_size", 14)
+	left_stats_label.add_theme_font_size_override("font_size", 13)
 	left_stats_label.add_theme_color_override("font_color", Color("#f7f1e3"))
+	left_stats_label.add_theme_color_override("font_shadow_color", Color("#050807"))
+	left_stats_label.add_theme_constant_override("shadow_offset_x", 1)
+	left_stats_label.add_theme_constant_override("shadow_offset_y", 1)
 	left_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	player_hud_margin.add_child(left_stats_label)
 
@@ -1124,16 +1127,7 @@ func _render() -> void:
 		view_state["names"][my_seat],
 	]
 	_render_trump_symbol()
-	var my_bid_text := "?"
-	if view_state["phase"] == "bidding":
-		my_bid_text = "in" if view_state["bid_submitted"][my_seat] else "..."
-	elif view_state["bids"][my_seat] != null:
-		my_bid_text = str(view_state["bids"][my_seat])
-	left_stats_label.text = "YOU\n%d pts\nBid %s   Tricks %d" % [
-		view_state["scores"][my_seat],
-		my_bid_text,
-		view_state["tricks_won"][my_seat],
-	]
+	left_stats_label.text = _scoreboard_text()
 	table_label.text = view_state["message"]
 
 	_render_trick()
@@ -1515,6 +1509,41 @@ func _sync_round_history_visibility() -> void:
 	round_history_panel.visible = round_history_visible and can_show
 	if round_history_panel.visible and round_history_label:
 		round_history_label.text = _round_history_text()
+
+func _scoreboard_text() -> String:
+	var names: Array = view_state.get("names", [])
+	var scores: Array = view_state.get("scores", [])
+	var bids: Array = view_state.get("bids", [])
+	var submitted: Array = view_state.get("bid_submitted", [])
+	var tricks: Array = view_state.get("tricks_won", [])
+	var active := int(view_state.get("active_player", -1))
+	var phase := str(view_state.get("phase", ""))
+	var lines := ["SCOREBOARD", "Player              Pts   Bid   Trk"]
+	for seat in range(names.size()):
+		var name := _scoreboard_name(str(names[seat]), seat)
+		var points := int(scores[seat]) if seat < scores.size() else 0
+		var bid_text := _scoreboard_bid_text(seat, bids, submitted, phase)
+		var trick_count := int(tricks[seat]) if seat < tricks.size() else 0
+		var marker := ">" if seat == active else " "
+		lines.append("%s %s  %d   %s   %d" % [marker, name, points, bid_text, trick_count])
+	return "\n".join(lines)
+
+func _scoreboard_name(name: String, seat: int) -> String:
+	var label := name
+	if seat == my_seat:
+		label += " (You)"
+	if label.length() > 16:
+		return label.substr(0, 15) + "."
+	return label
+
+func _scoreboard_bid_text(seat: int, bids: Array, submitted: Array, phase: String) -> String:
+	if phase == "bidding":
+		if seat < submitted.size() and bool(submitted[seat]):
+			return "in"
+		return "..."
+	if seat < bids.size() and bids[seat] != null:
+		return str(bids[seat])
+	return "-"
 
 func _round_history_text() -> String:
 	var history: Array = view_state.get("round_history", [])
