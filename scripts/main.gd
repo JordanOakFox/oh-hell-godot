@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.12"
+const GAME_VERSION := "0.2.13"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -1113,7 +1113,7 @@ func _render() -> void:
 
 	trick_box.visible = true
 	hand_box.visible = true
-	player_hud_panel.visible = true
+	player_hud_panel.visible = false
 	right_info_frame.visible = true
 	table_label.add_theme_font_size_override("font_size", 18)
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
@@ -1127,7 +1127,7 @@ func _render() -> void:
 		view_state["names"][my_seat],
 	]
 	_render_trump_symbol()
-	left_stats_label.text = _scoreboard_text()
+	left_stats_label.text = ""
 	table_label.text = view_state["message"]
 
 	_render_trick()
