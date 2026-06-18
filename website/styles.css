@@ -372,6 +372,10 @@ h1 {
   gap: 14px;
 }
 
+.hidden-field {
+  display: none;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -399,6 +403,20 @@ textarea {
 
 textarea {
   resize: vertical;
+}
+
+.form-status {
+  min-height: 24px;
+  margin: 0;
+  font-weight: 800;
+}
+
+.form-status.success {
+  color: #93df9d;
+}
+
+.form-status.error {
+  color: #ffb28f;
 }
 
 .footer {

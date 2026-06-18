@@ -116,8 +116,11 @@
         </div>
       </div>
 
-      <form class="panel suggestion-form" name="update-suggestion" method="POST" action="/thanks/" data-netlify="true">
+      <form class="panel suggestion-form" name="update-suggestion" method="POST" action="/thanks/" data-netlify="true" netlify netlify-honeypot="bot-field" data-suggestion-form>
         <input type="hidden" name="form-name" value="update-suggestion">
+        <p class="hidden-field">
+          <label>Do not fill this out if you are human: <input name="bot-field"></label>
+        </p>
         <div class="form-grid">
           <label>
             Your name
@@ -152,6 +155,7 @@
           </select>
         </label>
         <button class="button primary" type="submit">Submit Suggestion</button>
+        <p class="form-status" data-form-status aria-live="polite"></p>
       </form>
     </section>
 

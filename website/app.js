@@ -45,3 +45,52 @@ fetch("/requests.json")
       board.innerHTML = "<p>Could not load the update board right now.</p>";
     }
   });
+
+const suggestionForm = document.querySelector("[data-suggestion-form]");
+const formStatus = document.querySelector("[data-form-status]");
+
+const encodeForm = form => new URLSearchParams(new FormData(form)).toString();
+
+if (suggestionForm) {
+  suggestionForm.addEventListener("submit", event => {
+    event.preventDefault();
+
+    const submitButton = suggestionForm.querySelector("button[type='submit']");
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.textContent = "Sending...";
+    }
+    if (formStatus) {
+      formStatus.textContent = "";
+      formStatus.className = "form-status";
+    }
+
+    fetch("/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: encodeForm(suggestionForm)
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error("Form submission failed");
+        }
+        suggestionForm.reset();
+        if (formStatus) {
+          formStatus.textContent = "Sent. Thanks for the idea.";
+          formStatus.className = "form-status success";
+        }
+      })
+      .catch(() => {
+        if (formStatus) {
+          formStatus.textContent = "That did not send. Try again, or text Jordan the idea for now.";
+          formStatus.className = "form-status error";
+        }
+      })
+      .finally(() => {
+        if (submitButton) {
+          submitButton.disabled = false;
+          submitButton.textContent = "Submit Suggestion";
+        }
+      });
+  });
+}
