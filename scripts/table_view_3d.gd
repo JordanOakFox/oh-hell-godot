@@ -99,8 +99,8 @@ func _process(delta: float) -> void:
 	_update_camera()
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
-		look_enabled = not look_enabled
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+		look_enabled = event.pressed
 		skip_next_mouse_motion = look_enabled
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if look_enabled else Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseMotion and look_enabled:

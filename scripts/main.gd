@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.10"
+const GAME_VERSION := "0.2.11"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -91,6 +91,7 @@ var net_row: HBoxContainer
 var advanced_net_row: HBoxContainer
 var advanced_network_button: Button
 var mute_button: Button
+var sfx_mute_button: Button
 var settings_button: Button
 var rules_button: Button
 var settings_panel: PanelContainer
@@ -351,6 +352,10 @@ func _build_ui() -> void:
 	sfx_volume_slider.value = Profile.sfx_volume() * 100.0
 	sfx_volume_slider.value_changed.connect(_on_sfx_volume_changed)
 	settings_box.add_child(sfx_volume_slider)
+
+	sfx_mute_button = Button.new()
+	sfx_mute_button.pressed.connect(_on_sfx_mute_pressed)
+	settings_box.add_child(sfx_mute_button)
 
 	var animal_label := Label.new()
 	animal_label.text = "Animal"
@@ -693,9 +698,12 @@ func _on_mute_pressed() -> void:
 	_toggle_mute_shortcut()
 
 func _toggle_mute_shortcut() -> void:
-	Profile.set_music_muted(not Profile.music_muted())
+	var muted := not (Profile.music_muted() and Profile.sfx_muted())
+	Profile.set_music_muted(muted)
+	Profile.set_sfx_muted(muted)
 	_apply_audio_settings()
-	_play_sfx("click")
+	if not muted:
+		_play_sfx("click")
 
 func _on_music_volume_changed(value: float) -> void:
 	Profile.set_music_volume(value / 100.0)
@@ -705,8 +713,17 @@ func _on_music_volume_changed(value: float) -> void:
 
 func _on_sfx_volume_changed(value: float) -> void:
 	Profile.set_sfx_volume(value / 100.0)
+	if value > 0.0 and Profile.sfx_muted():
+		Profile.set_sfx_muted(false)
 	_update_audio_labels()
 	_play_sfx("click")
+
+func _on_sfx_mute_pressed() -> void:
+	var muted := not Profile.sfx_muted()
+	Profile.set_sfx_muted(muted)
+	_update_audio_labels()
+	if not muted:
+		_play_sfx("click")
 
 func _on_animal_selected(index: int) -> void:
 	if not animal_picker or index < 0:
@@ -732,11 +749,13 @@ func _apply_audio_settings() -> void:
 
 func _update_audio_labels() -> void:
 	if mute_button:
-		mute_button.text = "Unmute" if Profile.music_muted() else "Mute"
+		mute_button.text = "Unmute" if Profile.music_muted() and Profile.sfx_muted() else "Mute"
 	if music_volume_label:
 		music_volume_label.text = "Music Volume: %d%%" % roundi(Profile.music_volume() * 100.0)
 	if sfx_volume_label:
 		sfx_volume_label.text = "SFX Volume: %d%%" % roundi(Profile.sfx_volume() * 100.0)
+	if sfx_mute_button:
+		sfx_mute_button.text = "Unmute SFX" if Profile.sfx_muted() else "Mute SFX"
 
 func _sync_advanced_network_visibility() -> void:
 	if advanced_network_button:
@@ -1608,6 +1627,8 @@ func _handle_sound_event(event) -> void:
 
 func _play_sfx(name: String) -> void:
 	if not sfx_player:
+		return
+	if Profile.sfx_muted():
 		return
 	var volume := Profile.sfx_volume()
 	if volume <= 0.0:

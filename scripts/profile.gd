@@ -88,6 +88,13 @@ func set_sfx_volume(value: float) -> void:
 	data["sfx_volume"] = clampf(value, 0.0, 1.0)
 	save_profile()
 
+func sfx_muted() -> bool:
+	return bool(data.get("sfx_muted", false))
+
+func set_sfx_muted(muted: bool) -> void:
+	data["sfx_muted"] = muted
+	save_profile()
+
 func bot_personality() -> String:
 	var selected := str(data.get("bot_personality", "smart"))
 	return selected if BOT_PERSONALITIES.has(selected) else "smart"
@@ -112,6 +119,7 @@ func _default_profile() -> Dictionary:
 		"music_volume": 0.7,
 		"music_muted": false,
 		"sfx_volume": 0.75,
+		"sfx_muted": false,
 		"bot_personality": "smart",
 		"games_played": 0,
 		"wins": 0,

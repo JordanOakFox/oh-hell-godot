@@ -20,6 +20,8 @@ The server is authoritative. Clients submit bids and card plays to the server, a
 - Bot style can be set to Casual, Smart, or Ruthless from Settings.
 - Players can open an in-game round history panel during play.
 - The table host can end a running game and return everyone to the lobby.
+- `M` toggles all game audio, and Settings can mute SFX separately.
+- Hold right mouse button and drag during play to look around the table.
 
 ## Current Online Server
 
