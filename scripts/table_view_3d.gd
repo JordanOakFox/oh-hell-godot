@@ -58,6 +58,7 @@ var look_pitch := -10.0
 var lobby_walk_position := Vector3(0, 1.35, 3.6)
 var lobby_walk_yaw := 180.0
 var lobby_walk_pitch := -8.0
+var lobby_avatar_yaw := 180.0
 var hand_signature := ""
 var hovered_hand_index := -1
 var current_map_id := "landing"
@@ -127,13 +128,14 @@ func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	if players <= 0:
 		return
 	var phase := str(table_state.get("phase", ""))
+	var previous_camera_mode := camera_mode
+	camera_mode = "seat" if phase in ["bidding", "playing", "trick_end", "round_end"] else ("lobby_walk" if phase in ["connecting", "lobby"] else "overview")
 	var map_id := "landing" if bool(table_state.get("menu_preview", false)) or phase in ["connecting", "lobby"] else str(table_state.get("map_id", "living_room"))
 	if map_id != current_map_id:
 		_rebuild_map(map_id)
-	if players != seat_count:
+	if players != seat_count or previous_camera_mode != camera_mode:
 		_rebuild_seats(players)
 	local_seat = clampi(my_seat, 0, max(players - 1, 0))
-	camera_mode = "seat" if phase in ["bidding", "playing", "trick_end", "round_end"] else ("lobby_walk" if phase in ["connecting", "lobby"] else "overview")
 	if not (camera_mode in ["seat", "lobby_walk"]) and look_enabled:
 		look_enabled = false
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -165,6 +167,13 @@ func set_emote_event(event) -> void:
 
 func is_mouse_look_enabled() -> bool:
 	return look_enabled
+
+func get_lobby_avatar_state() -> Dictionary:
+	return {
+		"x": lobby_walk_position.x,
+		"z": lobby_walk_position.z,
+		"yaw": lobby_avatar_yaw,
+	}
 
 func pick_hand_card(mouse_position: Vector2, display_size: Vector2) -> int:
 	if not camera or not hand_root or hand_root.get_child_count() == 0 or display_size.x <= 0.0 or display_size.y <= 0.0:
@@ -363,62 +372,62 @@ func _build_landing_map() -> void:
 	_set_world_colors(Color("#9dd2e3"), Color("#d8f0ef"), 1.12)
 	_build_ocean()
 
-	var shore := _box(Vector3(8.4, 0.18, 2.0), Color("#5f9b55"))
-	shore.position = Vector3(0, -0.22, -3.0)
+	var shore := _box(Vector3(14.5, 0.18, 4.0), Color("#5f9b55"))
+	shore.position = Vector3(0, -0.22, -4.0)
 	ship_root.add_child(shore)
-	var road := _box(Vector3(1.0, 0.035, 2.25), Color("#9c9c8d"))
-	road.position = Vector3(-2.65, -0.08, -3.05)
+	var road := _box(Vector3(1.45, 0.035, 4.6), Color("#9c9c8d"))
+	road.position = Vector3(-4.25, -0.08, -4.18)
 	ship_root.add_child(road)
-	var ferry_ramp := _box(Vector3(1.45, 0.08, 1.1), Color("#777c78"))
-	ferry_ramp.position = Vector3(-2.65, -0.03, -1.95)
+	var ferry_ramp := _box(Vector3(1.85, 0.08, 1.45), Color("#777c78"))
+	ferry_ramp.position = Vector3(-4.25, -0.03, -2.15)
 	ship_root.add_child(ferry_ramp)
 
-	var dock := _box(Vector3(5.8, 0.11, 0.54), Color("#7b5a3a"))
-	dock.position = Vector3(1.15, 0.02, -1.42)
+	var dock := _box(Vector3(8.2, 0.11, 0.7), Color("#7b5a3a"))
+	dock.position = Vector3(1.25, 0.02, -1.62)
 	ship_root.add_child(dock)
-	for i in range(7):
+	for i in range(11):
 		var post := _cylinder(0.055, 0.62, Color("#5c422b"))
-		post.position = Vector3(-1.2 + float(i) * 0.72, -0.18, -1.05)
+		post.position = Vector3(-2.6 + float(i) * 0.72, -0.18, -1.13)
 		ship_root.add_child(post)
 
-	var ferry := _box(Vector3(1.45, 0.32, 0.78), Color("#d8dedb"))
-	ferry.position = Vector3(-3.35, 0.08, -1.2)
+	var ferry := _box(Vector3(2.0, 0.32, 1.05), Color("#d8dedb"))
+	ferry.position = Vector3(-5.15, 0.08, -1.35)
 	ship_root.add_child(ferry)
 	var ferry_booth := _box(Vector3(0.5, 0.42, 0.38), Color("#c3d1d0"))
-	ferry_booth.position = Vector3(-3.35, 0.45, -1.2)
+	ferry_booth.position = Vector3(-5.15, 0.45, -1.35)
 	ship_root.add_child(ferry_booth)
 
-	var restaurant := _box(Vector3(2.35, 1.05, 1.0), Color("#43b8d8"))
-	restaurant.position = Vector3(1.25, 0.42, -2.18)
+	var restaurant := _box(Vector3(3.2, 1.1, 1.15), Color("#43b8d8"))
+	restaurant.position = Vector3(2.0, 0.42, -3.15)
 	ship_root.add_child(restaurant)
-	var roof := _box(Vector3(2.65, 0.18, 1.18), Color("#dce8e7"))
-	roof.position = Vector3(1.25, 1.05, -2.18)
+	var roof := _box(Vector3(3.55, 0.18, 1.35), Color("#dce8e7"))
+	roof.position = Vector3(2.0, 1.08, -3.15)
 	roof.rotation_degrees.z = 2
 	ship_root.add_child(roof)
-	var awning := _box(Vector3(1.8, 0.08, 0.48), Color("#37c7d8"))
-	awning.position = Vector3(2.0, 0.72, -1.52)
+	var awning := _box(Vector3(2.5, 0.08, 0.58), Color("#37c7d8"))
+	awning.position = Vector3(2.75, 0.72, -2.35)
 	ship_root.add_child(awning)
 	for i in range(4):
 		var window := _box(Vector3(0.28, 0.28, 0.035), Color("#d9f7ff"))
-		window.position = Vector3(0.35 + float(i) * 0.42, 0.56, -1.66)
+		window.position = Vector3(0.95 + float(i) * 0.52, 0.56, -2.56)
 		ship_root.add_child(window)
 	var sign := _cylinder(0.24, 0.055, Color("#1f6eb8"))
-	sign.position = Vector3(-0.15, 0.72, -1.64)
+	sign.position = Vector3(0.08, 0.72, -2.56)
 	sign.rotation_degrees = Vector3(90, 0, 0)
 	ship_root.add_child(sign)
 
-	for i in range(8):
+	for i in range(13):
 		var trunk := _cylinder(0.06, 0.7, Color("#6f4b2f"))
-		trunk.position = Vector3(-3.6 + float(i) * 0.78, 0.15, -3.65)
+		trunk.position = Vector3(-6.2 + float(i) * 0.95, 0.15, -5.5)
 		ship_root.add_child(trunk)
 		var crown := _box(Vector3(0.55, 0.55, 0.55), Color("#4f8f48"))
 		crown.position = trunk.position + Vector3(0, 0.55, 0)
 		ship_root.add_child(crown)
 
-	var patio := _box(Vector3(4.5, 0.1, 2.6), Color("#9b744d"))
-	patio.position = Vector3(0.5, -0.04, 0.8)
+	var patio := _box(Vector3(8.0, 0.1, 4.4), Color("#9b744d"))
+	patio.position = Vector3(0.55, -0.04, 1.35)
 	ship_root.add_child(patio)
-	_attach_table_area()
+	_attach_lobby_area()
 
 func _attach_table_area() -> void:
 	_build_table()
@@ -427,6 +436,25 @@ func _attach_table_area() -> void:
 	ship_root.add_child(seat_root)
 	trick_root = Node3D.new()
 	ship_root.add_child(trick_root)
+
+func _attach_lobby_area() -> void:
+	seat_root = Node3D.new()
+	ship_root.add_child(seat_root)
+	trick_root = Node3D.new()
+	ship_root.add_child(trick_root)
+
+	var ready_sign := _box(Vector3(1.25, 0.75, 0.08), Color("#172022"))
+	ready_sign.position = Vector3(-2.6, 0.65, 2.7)
+	ship_root.add_child(ready_sign)
+	var ready_label := Label3D.new()
+	ready_label.text = "Ready Up\nbutton below"
+	ready_label.font_size = 32
+	ready_label.modulate = Color("#ffe18f")
+	ready_label.outline_size = 6
+	ready_label.outline_modulate = Color("#17110c")
+	ready_label.position = Vector3(-2.6, 0.74, 2.64)
+	ready_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	ship_root.add_child(ready_label)
 
 func _build_space_map() -> void:
 	table_felt_color = Color("#15204f")
@@ -589,6 +617,8 @@ func _build_jolly_roger() -> void:
 	flag_root.add_child(bone_b)
 
 func _rebuild_seats(players: int) -> void:
+	if not seat_root:
+		return
 	for child in seat_root.get_children():
 		child.queue_free()
 	seats.clear()
@@ -597,10 +627,16 @@ func _rebuild_seats(players: int) -> void:
 	seat_moods.clear()
 	seat_count = players
 	for seat in range(players):
-		var angle := (TAU * float(seat) / float(players)) - PI * 0.5
 		var avatar := _make_avatar(seat)
-		var position := Vector3(cos(angle) * 3.05, 0.36, sin(angle) * 3.05)
-		var rotation := -angle + PI * 0.5
+		var position := Vector3.ZERO
+		var rotation := 0.0
+		if camera_mode == "lobby_walk":
+			position = _lobby_spawn_position(seat)
+			rotation = deg_to_rad(180.0)
+		else:
+			var angle := (TAU * float(seat) / float(players)) - PI * 0.5
+			position = Vector3(cos(angle) * 3.05, 0.36, sin(angle) * 3.05)
+			rotation = -angle + PI * 0.5
 		avatar.position = position
 		avatar.rotation.y = rotation
 		seat_root.add_child(avatar)
@@ -608,6 +644,12 @@ func _rebuild_seats(players: int) -> void:
 		seat_base_positions.append(position)
 		seat_base_rotations.append(rotation)
 		seat_moods.append("neutral")
+
+func _lobby_spawn_position(seat: int) -> Vector3:
+	var columns := 5
+	var x := -2.8 + float(seat % columns) * 1.4
+	var z := 2.75 - float(seat / columns) * 1.05
+	return Vector3(x, 0.16, z)
 
 func _make_avatar(seat: int, animal := "fox") -> Node3D:
 	var root := Node3D.new()
@@ -767,6 +809,7 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 	var tricks: Array = table_state.get("tricks_won", [])
 	var scores: Array = table_state.get("scores", [])
 	var submitted_bids: Array = table_state.get("bid_submitted", [])
+	var lobby_avatars: Array = table_state.get("lobby_avatars", [])
 	for seat in range(min(seats.size(), seat_count)):
 		var avatar: Node3D = seats[seat]
 		var animal := "fox"
@@ -789,6 +832,27 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 			var display_name := "You" if seat == my_seat else name
 			label.text = "%s <" % display_name if seat == current_active else display_name
 			label.modulate = Color("#ffe18f") if seat == current_active else Color("#f9f4e8")
+		if camera_mode == "lobby_walk":
+			var lobby_info: Dictionary = {}
+			if seat < lobby_avatars.size() and typeof(lobby_avatars[seat]) == TYPE_DICTIONARY:
+				lobby_info = lobby_avatars[seat]
+			if seat == my_seat:
+				avatar.position = Vector3(lobby_walk_position.x, 0.16, lobby_walk_position.z)
+				avatar.rotation.y = deg_to_rad(lobby_avatar_yaw)
+			elif not lobby_info.is_empty():
+				var target := Vector3(float(lobby_info.get("x", avatar.position.x)), 0.16, float(lobby_info.get("z", avatar.position.z)))
+				avatar.position = avatar.position.lerp(target, 0.25)
+				avatar.rotation.y = lerp_angle(avatar.rotation.y, deg_to_rad(float(lobby_info.get("yaw", rad_to_deg(avatar.rotation.y)))), 0.25)
+			else:
+				avatar.position = avatar.position.lerp(_lobby_spawn_position(seat), 0.08)
+			var lobby_status := avatar.get_node_or_null("Score") as Label3D
+			if lobby_status:
+				var ready: Array = table_state.get("ready", [])
+				lobby_status.text = "ready" if seat < ready.size() and bool(ready[seat]) else "not ready"
+				lobby_status.modulate = Color("#93df9d") if seat < ready.size() and bool(ready[seat]) else Color("#fff6d8")
+			avatar.visible = seat >= connected.size() or bool(connected[seat])
+			seat_moods[seat] = "neutral"
+			continue
 		var score_label := avatar.get_node_or_null("Score") as Label3D
 		if score_label:
 			score_label.text = _seat_score_text(seat, phase, scores, bids, submitted_bids, tricks)
@@ -1045,9 +1109,11 @@ func _update_lobby_walk(delta: float) -> void:
 	var yaw_radians := deg_to_rad(lobby_walk_yaw)
 	var forward := Vector3(-sin(yaw_radians), 0, -cos(yaw_radians)).normalized()
 	var right := Vector3(forward.z, 0, -forward.x).normalized()
-	lobby_walk_position += (forward * -input.z + right * input.x) * delta * 2.15
-	lobby_walk_position.x = clampf(lobby_walk_position.x, -3.65, 3.65)
-	lobby_walk_position.z = clampf(lobby_walk_position.z, -3.75, 4.25)
+	var movement := (forward * -input.z + right * input.x).normalized()
+	lobby_walk_position += movement * delta * 2.15
+	lobby_avatar_yaw = rad_to_deg(atan2(-movement.x, -movement.z))
+	lobby_walk_position.x = clampf(lobby_walk_position.x, -5.75, 5.75)
+	lobby_walk_position.z = clampf(lobby_walk_position.z, -5.65, 4.6)
 	lobby_walk_position.y = 1.35
 
 func _update_camera() -> void:

@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.18"
+const GAME_VERSION := "0.2.19"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -81,6 +81,8 @@ var rules_visible := false
 var round_history_visible := false
 var scoreboard_visible := false
 var last_sound_serial := 0
+var lobby_avatar_send_timer := 0.0
+var last_lobby_avatar_signature := ""
 
 var title_label: Label
 var version_label: Label
@@ -152,7 +154,8 @@ func _ready() -> void:
 	_create_offline_lobby()
 	_apply_command_line_mode()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_update_lobby_avatar_sync(delta)
 	if turn_banner_panel and turn_banner_panel.visible:
 		var pulse := 0.72 + absf(sin(Time.get_ticks_msec() / 140.0)) * 0.28
 		turn_banner_panel.modulate = Color(1, 1, 1, pulse)
@@ -951,6 +954,7 @@ func _create_client_waiting_view() -> void:
 		"active_player": -1,
 		"connected": _filled_array(lobby_player_count, false),
 		"bots": _filled_array(lobby_player_count, false),
+		"lobby_avatars": _default_lobby_avatars(lobby_player_count),
 		"bot_personality": Profile.bot_personality(),
 		"ready": _filled_array(lobby_player_count, false),
 		"play_again": _filled_array(lobby_player_count, false),
@@ -992,6 +996,7 @@ func _create_lobby(message: String) -> void:
 		"active_player": -1,
 		"connected": _connected_seats(),
 		"bots": _filled_array(lobby_player_count, false),
+		"lobby_avatars": _default_lobby_avatars(lobby_player_count),
 		"bot_personality": Profile.bot_personality(),
 		"ready": _lobby_ready_seats(),
 		"play_again": _filled_array(lobby_player_count, false),
@@ -1101,6 +1106,52 @@ func _receive_private_state(public_state: Dictionary, hand: Array, seat: int) ->
 	my_seat = seat
 	_handle_sound_event(public_state.get("sound_event", {}))
 	_render()
+
+func _update_lobby_avatar_sync(delta: float) -> void:
+	if view_state.is_empty() or str(view_state.get("phase", "")) != "lobby":
+		return
+	if my_seat < 0:
+		return
+	if not table_view_3d or not table_view_3d.has_method("get_lobby_avatar_state"):
+		return
+	lobby_avatar_send_timer -= delta
+	if lobby_avatar_send_timer > 0.0:
+		return
+	lobby_avatar_send_timer = 0.16
+	var avatar_state: Dictionary = table_view_3d.get_lobby_avatar_state()
+	var signature := "%.2f:%.2f:%.1f" % [
+		float(avatar_state.get("x", 0.0)),
+		float(avatar_state.get("z", 0.0)),
+		float(avatar_state.get("yaw", 0.0)),
+	]
+	if signature == last_lobby_avatar_signature:
+		return
+	last_lobby_avatar_signature = signature
+	if multiplayer.multiplayer_peer and not multiplayer.is_server():
+		_server_update_lobby_avatar.rpc_id(1, avatar_state)
+	else:
+		_apply_lobby_avatar_update(my_seat, avatar_state)
+
+@rpc("any_peer", "unreliable")
+func _server_update_lobby_avatar(avatar_state: Dictionary) -> void:
+	if not multiplayer.is_server():
+		return
+	_apply_lobby_avatar_update(_seat_for_peer(multiplayer.get_remote_sender_id()), avatar_state)
+
+func _apply_lobby_avatar_update(seat: int, avatar_state: Dictionary) -> void:
+	if state.get("phase", "") != "lobby":
+		return
+	var player_count := int(state.get("num_players", 0))
+	if seat < 0 or seat >= player_count:
+		return
+	if not state.has("lobby_avatars") or not (state["lobby_avatars"] is Array) or state["lobby_avatars"].size() != player_count:
+		state["lobby_avatars"] = _default_lobby_avatars(player_count)
+	state["lobby_avatars"][seat] = {
+		"x": clampf(float(avatar_state.get("x", 0.0)), -5.75, 5.75),
+		"z": clampf(float(avatar_state.get("z", 0.0)), -5.65, 4.6),
+		"yaw": fposmod(float(avatar_state.get("yaw", 180.0)), 360.0),
+	}
+	_publish_state()
 
 func _public_state() -> Dictionary:
 	var public := state.duplicate(true)
@@ -2191,6 +2242,7 @@ func _resize_host_lobby(player_count: int, max_cards: int) -> void:
 	var old_profiles: Array = state.get("profiles", []).duplicate(true)
 	var old_ready: Array = state.get("ready", []).duplicate(true)
 	var old_bots: Array = state.get("bots", []).duplicate(true)
+	var old_lobby_avatars: Array = state.get("lobby_avatars", []).duplicate(true)
 	var old_peers: Array = seat_peers.duplicate(true)
 	seat_peers = _new_seat_peers(player_count)
 
@@ -2205,6 +2257,7 @@ func _resize_host_lobby(player_count: int, max_cards: int) -> void:
 	state["names"] = _default_names(player_count)
 	state["profiles"] = _default_profiles(player_count)
 	state["bots"] = _filled_array(player_count, false)
+	state["lobby_avatars"] = _default_lobby_avatars(player_count)
 	state["ready"] = _filled_array(player_count, false)
 	for seat in range(player_count):
 		if seat < old_names.size():
@@ -2213,6 +2266,8 @@ func _resize_host_lobby(player_count: int, max_cards: int) -> void:
 			state["profiles"][seat] = old_profiles[seat]
 		if seat < old_bots.size() and int(seat_peers[seat]) == 0:
 			state["bots"][seat] = old_bots[seat]
+		if seat < old_lobby_avatars.size() and typeof(old_lobby_avatars[seat]) == TYPE_DICTIONARY:
+			state["lobby_avatars"][seat] = old_lobby_avatars[seat]
 		if seat < old_ready.size() and int(seat_peers[seat]) != 0:
 			state["ready"][seat] = old_ready[seat]
 	state["connected"] = _connected_seats()
@@ -3019,6 +3074,7 @@ func _return_to_lobby(message: String) -> void:
 		"active_player": -1,
 		"connected": _connected_seats(),
 		"bots": state.get("bots", _filled_array(lobby_player_count, false)).duplicate(true),
+		"lobby_avatars": _default_lobby_avatars(lobby_player_count),
 		"bot_personality": bot_personality,
 		"ready": _filled_array(lobby_player_count, false),
 		"play_again": _filled_array(lobby_player_count, false),
@@ -3112,6 +3168,17 @@ func _filled_array(count: int, value) -> Array:
 	for _i in range(count):
 		values.append(value)
 	return values
+
+func _default_lobby_avatars(count: int) -> Array:
+	var avatars: Array = []
+	var columns := 5
+	for seat in range(count):
+		avatars.append({
+			"x": -2.8 + float(seat % columns) * 1.4,
+			"z": 2.75 - float(seat / columns) * 1.05,
+			"yaw": 180.0,
+		})
+	return avatars
 
 func _empty_hands(count: int) -> Array:
 	var hands: Array = []
