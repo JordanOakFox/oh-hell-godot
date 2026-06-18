@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.14"
+const GAME_VERSION := "0.2.15"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -79,6 +79,7 @@ var advanced_network_visible := false
 var settings_visible := false
 var rules_visible := false
 var round_history_visible := false
+var scoreboard_visible := false
 var last_sound_serial := 0
 
 var title_label: Label
@@ -102,6 +103,7 @@ var sfx_volume_label: Label
 var animal_picker: OptionButton
 var bot_personality_picker: OptionButton
 var rules_panel: PanelContainer
+var history_button: Button
 var round_history_panel: PanelContainer
 var round_history_label: Label
 var settings_row: HBoxContainer
@@ -153,6 +155,9 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_I:
 		_request_hidden_emote()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_TAB:
+		_toggle_scoreboard()
 		return
 	if view_state.is_empty() or view_state.get("phase", "") != "playing":
 		_set_3d_card_hover(-1)
@@ -407,11 +412,11 @@ func _build_ui() -> void:
 	rules_margin.add_child(rules_text)
 
 	round_history_panel = PanelContainer.new()
-	round_history_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	round_history_panel.offset_left = -392
-	round_history_panel.offset_top = 132
-	round_history_panel.offset_right = -22
-	round_history_panel.offset_bottom = 520
+	round_history_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	round_history_panel.offset_left = 18
+	round_history_panel.offset_top = 126
+	round_history_panel.offset_right = 388
+	round_history_panel.offset_bottom = 514
 	round_history_panel.visible = false
 	round_history_panel.add_theme_stylebox_override("panel", _panel_style(Color("#16251ff0"), Color("#f0d28a66"), 8, 1))
 	add_child(round_history_panel)
@@ -428,6 +433,17 @@ func _build_ui() -> void:
 	round_history_label.add_theme_font_size_override("font_size", 14)
 	round_history_label.add_theme_color_override("font_color", Color("#f7f1e3"))
 	round_history_margin.add_child(round_history_label)
+
+	history_button = Button.new()
+	history_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	history_button.offset_left = 18
+	history_button.offset_top = 86
+	history_button.offset_right = 132
+	history_button.offset_bottom = 120
+	history_button.text = "History"
+	history_button.visible = false
+	history_button.pressed.connect(_toggle_round_history)
+	add_child(history_button)
 
 	settings_row = HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -501,13 +517,16 @@ func _build_ui() -> void:
 	root.add_child(play_row)
 
 	player_hud_panel = PanelContainer.new()
-	player_hud_panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	player_hud_panel.offset_left = 18
-	player_hud_panel.offset_top = 118
-	player_hud_panel.offset_right = 342
-	player_hud_panel.offset_bottom = 462
+	player_hud_panel.anchor_left = 0.5
+	player_hud_panel.anchor_top = 0.5
+	player_hud_panel.anchor_right = 0.5
+	player_hud_panel.anchor_bottom = 0.5
+	player_hud_panel.offset_left = -260
+	player_hud_panel.offset_top = -218
+	player_hud_panel.offset_right = 260
+	player_hud_panel.offset_bottom = 218
 	player_hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	player_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color("#111a20eb"), Color("#f0d28aaa"), 8, 2))
+	player_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color("#101820f2"), Color("#f0d28acc"), 8, 2))
 	player_hud_panel.visible = false
 	add_child(player_hud_panel)
 
@@ -520,7 +539,7 @@ func _build_ui() -> void:
 
 	left_stats_label = Label.new()
 	left_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	left_stats_label.add_theme_font_size_override("font_size", 13)
+	left_stats_label.add_theme_font_size_override("font_size", 16)
 	left_stats_label.add_theme_color_override("font_color", Color("#f7f1e3"))
 	left_stats_label.add_theme_color_override("font_shadow_color", Color("#050807"))
 	left_stats_label.add_theme_constant_override("shadow_offset_x", 1)
@@ -1052,6 +1071,7 @@ func _render() -> void:
 	if map_name_label:
 		map_name_label.text = _selected_map_name()
 	var active_game: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end"]
+	var overlay_phase: bool = view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end", "game_end"]
 	if title_label:
 		title_label.visible = view_state.get("phase", "") in ["connecting", "lobby", "game_end"]
 	if version_label:
@@ -1072,7 +1092,11 @@ func _render() -> void:
 		table_view_3d.set_player_hand(local_hand)
 		if table_view_3d.has_method("set_emote_event"):
 			table_view_3d.set_emote_event(view_state.get("emote_event", {}))
-	_update_music()
+		_update_music()
+	if history_button:
+		history_button.visible = overlay_phase
+		history_button.text = "Hide History" if round_history_visible else "History"
+	_sync_scoreboard_visibility()
 	_sync_round_history_visibility()
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
@@ -1083,6 +1107,8 @@ func _render() -> void:
 		player_hud_panel.visible = false
 		right_info_frame.visible = false
 		round_history_visible = false
+		scoreboard_visible = false
+		_sync_scoreboard_visibility()
 		_sync_round_history_visibility()
 		left_stats_label.text = ""
 		right_info_label.text = ""
@@ -1097,6 +1123,8 @@ func _render() -> void:
 		player_hud_panel.visible = false
 		right_info_frame.visible = false
 		round_history_visible = false
+		scoreboard_visible = false
+		_sync_scoreboard_visibility()
 		_sync_round_history_visibility()
 		left_stats_label.text = ""
 		right_info_label.text = ""
@@ -1113,7 +1141,7 @@ func _render() -> void:
 
 	trick_box.visible = true
 	hand_box.visible = true
-	player_hud_panel.visible = false
+	_sync_scoreboard_visibility()
 	right_info_frame.visible = true
 	table_label.add_theme_font_size_override("font_size", 18)
 	var round_size: int = view_state["sequence"][view_state["round_index"]]
@@ -1127,7 +1155,8 @@ func _render() -> void:
 		view_state["names"][my_seat],
 	]
 	_render_trump_symbol()
-	left_stats_label.text = ""
+	if player_hud_panel.visible:
+		left_stats_label.text = _scoreboard_text()
 	table_label.text = view_state["message"]
 
 	_render_trick()
@@ -1322,12 +1351,6 @@ func _render_actions() -> void:
 		waiting.add_theme_color_override("font_color", Color("#f7f1e3"))
 		action_box.add_child(waiting)
 
-	if view_state.get("phase", "") in ["bidding", "playing", "trick_end", "round_end", "game_end"]:
-		var history_button := Button.new()
-		history_button.text = "Hide History" if round_history_visible else "Round History"
-		history_button.pressed.connect(_toggle_round_history)
-		action_box.add_child(history_button)
-
 	if _can_request_end_game():
 		var end_button := Button.new()
 		end_button.text = "End Game"
@@ -1360,7 +1383,7 @@ func _set_3d_card_hover(index: int) -> void:
 		table_view_3d.set_hovered_hand_index(index)
 
 func _mouse_over_command_ui(position: Vector2) -> bool:
-	for control in [action_box, name_input, online_lobby_picker, advanced_network_button, mute_button, settings_button, rules_button, settings_panel, rules_panel, address_input, player_count_spin, max_cards_spin, discovered_game_picker, bot_personality_picker]:
+	for control in [action_box, history_button, player_hud_panel, round_history_panel, name_input, online_lobby_picker, advanced_network_button, mute_button, settings_button, rules_button, settings_panel, rules_panel, address_input, player_count_spin, max_cards_spin, discovered_game_picker, bot_personality_picker]:
 		if control and control.visible:
 			var rect := Rect2(control.global_position, control.size)
 			if rect.has_point(position):
@@ -1501,12 +1524,33 @@ func _toggle_round_history() -> void:
 	_sync_round_history_visibility()
 	_play_sfx("click")
 
+func _toggle_scoreboard() -> void:
+	var phase := str(view_state.get("phase", ""))
+	if not (phase in ["bidding", "playing", "trick_end", "round_end"]):
+		return
+	scoreboard_visible = not scoreboard_visible
+	_sync_scoreboard_visibility()
+	_play_sfx("click")
+
+func _sync_scoreboard_visibility() -> void:
+	if not player_hud_panel:
+		return
+	var phase := str(view_state.get("phase", ""))
+	var can_show := phase in ["bidding", "playing", "trick_end", "round_end"]
+	player_hud_panel.visible = scoreboard_visible and can_show
+	if player_hud_panel.visible and left_stats_label:
+		left_stats_label.text = _scoreboard_text()
+	elif left_stats_label:
+		left_stats_label.text = ""
+
 func _sync_round_history_visibility() -> void:
 	if not round_history_panel:
 		return
 	var phase := str(view_state.get("phase", ""))
 	var can_show := phase in ["bidding", "playing", "trick_end", "round_end", "game_end"]
 	round_history_panel.visible = round_history_visible and can_show
+	if history_button:
+		history_button.text = "Hide History" if round_history_visible else "History"
 	if round_history_panel.visible and round_history_label:
 		round_history_label.text = _round_history_text()
 

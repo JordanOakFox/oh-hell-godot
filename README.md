@@ -18,9 +18,9 @@ The server is authoritative. Clients submit bids and card plays to the server, a
 - The first joined player can manage lobby settings on the dedicated server.
 - Rejoining with the same saved profile returns a player to their previous seat when possible.
 - Bot style can be set to Casual, Smart, or Ruthless from Settings.
-- Physical in-game scoreboards show each player's points, bid status, tricks, and turn marker on the table.
-- Scoreboards are positioned outside the player ring so they do not block the seated view.
-- Players can open an in-game round history panel during play.
+- A flashing in-world `TURN` marker makes the active player easier to spot.
+- Press `Tab` during a round to show or hide your personal scoreboard overlay.
+- The round history tab sits at the top-left of the screen during games.
 - The table host can end a running game and return everyone to the lobby.
 - `M` toggles all game audio, and Settings can mute SFX separately.
 - Hold right mouse button and drag during play to look around the table.

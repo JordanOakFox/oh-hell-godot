@@ -41,7 +41,6 @@ var seat_root: Node3D
 var trick_root: Node3D
 var hand_root: Node3D
 var flag_root: Node3D
-var scoreboard_root: Node3D
 var seats: Array = []
 var seat_base_positions: Array = []
 var seat_base_rotations: Array = []
@@ -111,7 +110,7 @@ func _input(event: InputEvent) -> void:
 		if event.relative.length() > 220.0:
 			return
 		look_yaw = clampf(look_yaw - event.relative.x * 0.022, -56.0, 56.0)
-		look_pitch = clampf(look_pitch - event.relative.y * 0.018, -28.0, 26.0)
+		look_pitch = clampf(look_pitch - event.relative.y * 0.018, -18.0, 26.0)
 
 func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	if not is_inside_tree() or table_state.is_empty():
@@ -132,7 +131,6 @@ func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_seats(table_state, my_seat)
 	_update_trick(table_state)
-	_update_scoreboards(table_state, my_seat)
 
 func set_player_hand(hand: Array) -> void:
 	var signature := _hand_signature(hand)
@@ -556,53 +554,6 @@ func _build_table() -> void:
 		tick.position = Vector3(cos(angle) * 2.24, 0.59, sin(angle) * 2.24)
 		tick.rotation_degrees.y = -rad_to_deg(angle)
 		ship_root.add_child(tick)
-	_build_scoreboards()
-
-func _build_scoreboards() -> void:
-	scoreboard_root = Node3D.new()
-	scoreboard_root.name = "Scoreboards"
-	ship_root.add_child(scoreboard_root)
-	_make_scoreboard(Vector3(0, 1.32, -4.35), 180.0, "NorthScoreboard")
-	_make_scoreboard(Vector3(0, 1.32, 4.35), 0.0, "SouthScoreboard")
-
-func _make_scoreboard(position: Vector3, yaw_degrees: float, node_name: String) -> void:
-	var root := Node3D.new()
-	root.name = node_name
-	root.position = position
-	root.rotation_degrees.y = yaw_degrees
-	scoreboard_root.add_child(root)
-
-	var post_left := _box(Vector3(0.05, 0.72, 0.05), Color("#2a1a12"))
-	post_left.position = Vector3(-1.04, -0.18, 0.035)
-	root.add_child(post_left)
-	var post_right := _box(Vector3(0.05, 0.72, 0.05), Color("#2a1a12"))
-	post_right.position = Vector3(1.04, -0.18, 0.035)
-	root.add_child(post_right)
-
-	var panel := _box(Vector3(1.86, 0.74, 0.07), Color("#10161b"))
-	panel.position = Vector3(0, 0.08, 0)
-	root.add_child(panel)
-	var trim_top := _box(Vector3(1.92, 0.04, 0.09), Color("#f0d28a"))
-	trim_top.position = Vector3(0, 0.475, -0.005)
-	root.add_child(trim_top)
-	var trim_bottom := _box(Vector3(1.92, 0.04, 0.09), Color("#f0d28a"))
-	trim_bottom.position = Vector3(0, -0.315, -0.005)
-	root.add_child(trim_bottom)
-
-	var label := Label3D.new()
-	label.name = "Text"
-	label.text = "Scoreboard"
-	label.font_size = 24
-	label.pixel_size = 0.005
-	label.modulate = Color("#fff6d8")
-	label.outline_size = 5
-	label.outline_modulate = Color("#000000")
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	label.no_depth_test = true
-	label.position = Vector3(-0.84, 0.36, -0.05)
-	root.add_child(label)
-
 func _build_jolly_roger() -> void:
 	for i in range(5):
 		var strip := _box(Vector3(0.18, 0.5, 0.035), Color("#151515"))
@@ -740,6 +691,20 @@ func _make_avatar(seat: int, animal := "fox") -> Node3D:
 	active_marker.visible = false
 	root.add_child(active_marker)
 
+	var turn_indicator := Label3D.new()
+	turn_indicator.name = "TurnIndicator"
+	turn_indicator.text = "TURN"
+	turn_indicator.font_size = 26
+	turn_indicator.pixel_size = 0.006
+	turn_indicator.modulate = Color("#ffe18f")
+	turn_indicator.outline_size = 8
+	turn_indicator.outline_modulate = Color("#000000")
+	turn_indicator.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	turn_indicator.no_depth_test = true
+	turn_indicator.position = Vector3(0, 1.95, 0)
+	turn_indicator.visible = false
+	root.add_child(turn_indicator)
+
 	var emote_anchor := Node3D.new()
 	emote_anchor.name = "Emote"
 	emote_anchor.position = Vector3(0, 1.12, -0.58)
@@ -825,6 +790,9 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 		var active := avatar.get_node_or_null("Active") as Node3D
 		if active:
 			active.visible = seat == current_active
+		var turn_indicator := avatar.get_node_or_null("TurnIndicator") as Label3D
+		if turn_indicator:
+			turn_indicator.visible = seat == current_active
 		avatar.visible = seat >= connected.size() or bool(connected[seat])
 		var mood := "neutral"
 		if phase in ["round_end", "game_end"] and seat < bids.size() and seat < tricks.size() and bids[seat] != null:
@@ -847,42 +815,6 @@ func _seat_score_text(seat: int, phase: String, scores: Array, bids: Array, subm
 	elif seat < bids.size() and bids[seat] != null:
 		bid_text = str(bids[seat])
 	return "%dp  b%s  t%d" % [points, bid_text, trick_count]
-
-func _update_scoreboards(table_state: Dictionary, my_seat: int) -> void:
-	if not scoreboard_root:
-		return
-	var text := _scoreboard_3d_text(table_state, my_seat)
-	for board in scoreboard_root.get_children():
-		var label := board.get_node_or_null("Text") as Label3D
-		if label:
-			label.text = text
-
-func _scoreboard_3d_text(table_state: Dictionary, my_seat: int) -> String:
-	var names: Array = table_state.get("names", [])
-	var scores: Array = table_state.get("scores", [])
-	var bids: Array = table_state.get("bids", [])
-	var submitted: Array = table_state.get("bid_submitted", [])
-	var tricks: Array = table_state.get("tricks_won", [])
-	var active := int(table_state.get("active_player", -1))
-	var phase := str(table_state.get("phase", ""))
-	var lines := ["SCOREBOARD", "Name       Pts Bid Trk"]
-	for seat in range(min(names.size(), 10)):
-		var name := "You" if seat == my_seat else str(names[seat])
-		if name.length() > 8:
-			name = name.substr(0, 7) + "."
-		var points := int(scores[seat]) if seat < scores.size() else 0
-		var trick_count := int(tricks[seat]) if seat < tricks.size() else 0
-		var bid_text := _scoreboard_bid_text(seat, bids, submitted, phase)
-		var marker := ">" if seat == active else " "
-		lines.append("%s %-8s %3d %3s %3d" % [marker, name, points, bid_text, trick_count])
-	return "\n".join(lines)
-
-func _scoreboard_bid_text(seat: int, bids: Array, submitted: Array, phase: String) -> String:
-	if phase == "bidding":
-		return "in" if seat < submitted.size() and bool(submitted[seat]) else "..."
-	if seat < bids.size() and bids[seat] != null:
-		return str(bids[seat])
-	return "-"
 
 func _update_trick_pile(pile: Node3D, trick_count: int) -> void:
 	for child in pile.get_children():
@@ -1038,6 +970,15 @@ func _animate_seats() -> void:
 		avatar.rotation.y = seat_base_rotations[seat]
 		avatar.rotation_degrees.x = lean
 		avatar.rotation_degrees.z = sin(time * 1.7 + float(seat)) * (1.8 if seat == current_active else 0.8)
+		var active := avatar.get_node_or_null("Active") as Node3D
+		if active and active.visible:
+			var pulse := 1.0 + absf(sin(time * 5.8)) * 0.28
+			active.scale = Vector3(pulse, 1.0, pulse)
+		var turn_indicator := avatar.get_node_or_null("TurnIndicator") as Label3D
+		if turn_indicator and turn_indicator.visible:
+			var flash := 0.58 + absf(sin(time * 6.4)) * 0.42
+			turn_indicator.modulate = Color(1.0, 0.86, 0.28, flash)
+			turn_indicator.scale = Vector3.ONE * (1.0 + absf(sin(time * 6.4)) * 0.12)
 	_animate_player_hand()
 
 func _animate_player_hand() -> void:
@@ -1065,11 +1006,11 @@ func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: b
 	card.scale = Vector3.ONE * base_scale * (1.08 if hovered else 1.0)
 	card.position = Vector3(
 		offset * spread,
-		-0.69 + lift - absf(offset) * 0.006 + sin(time * 2.0 + float(index)) * 0.002,
-		-1.34 - absf(offset) * 0.008 - (0.04 if hovered else 0.0)
+		-0.5 + lift - absf(offset) * 0.006 + sin(time * 2.0 + float(index)) * 0.002,
+		-1.08 - absf(offset) * 0.008 - (0.04 if hovered else 0.0)
 	)
 	card.rotation_degrees = Vector3(
-		68.0 + absf(offset) * 0.45 + sin(time * 1.5 + float(index)) * 0.25,
+		62.0 + absf(offset) * 0.45 + sin(time * 1.5 + float(index)) * 0.25,
 		-offset * 0.25,
 		-fan_turn
 	)
