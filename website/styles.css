@@ -376,6 +376,10 @@ h1 {
   display: none;
 }
 
+.netlify-detector {
+  display: none;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

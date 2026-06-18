@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oh Hell Suggestion Form</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="thanks-page">
+  <form class="thanks-card" name="update-suggestion" method="POST" action="/thanks/" data-netlify="true" netlify netlify-honeypot="bot-field">
+    <input type="hidden" name="form-name" value="update-suggestion">
+    <p class="hidden-field">
+      <label>Do not fill this out if you are human: <input name="bot-field"></label>
+    </p>
+    <label>
+      Your name
+      <input name="name" required>
+    </label>
+    <label>
+      Category
+      <input name="category" required>
+    </label>
+    <label>
+      Request title
+      <input name="title" required>
+    </label>
+    <label>
+      What should change?
+      <textarea name="message" rows="6" required></textarea>
+    </label>
+    <label>
+      How important is it?
+      <input name="priority">
+    </label>
+    <button class="button primary" type="submit">Submit Suggestion</button>
+  </form>
+</body>
+</html>

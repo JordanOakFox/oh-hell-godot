@@ -65,7 +65,7 @@ if (suggestionForm) {
       formStatus.className = "form-status";
     }
 
-    fetch("/", {
+    fetch("/form-detector.html", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: encodeForm(suggestionForm)
