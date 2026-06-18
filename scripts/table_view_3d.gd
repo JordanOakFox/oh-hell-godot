@@ -55,6 +55,9 @@ var look_enabled := false
 var skip_next_mouse_motion := false
 var look_yaw := 0.0
 var look_pitch := -10.0
+var lobby_walk_position := Vector3(0, 1.35, 3.6)
+var lobby_walk_yaw := 180.0
+var lobby_walk_pitch := -8.0
 var hand_signature := ""
 var hovered_hand_index := -1
 var current_map_id := "landing"
@@ -96,6 +99,7 @@ func _process(delta: float) -> void:
 	_animate_flag()
 	_animate_seats()
 	_animate_emotes()
+	_update_lobby_walk(delta)
 	_update_camera()
 
 func _input(event: InputEvent) -> void:
@@ -109,8 +113,12 @@ func _input(event: InputEvent) -> void:
 			return
 		if event.relative.length() > 220.0:
 			return
-		look_yaw = clampf(look_yaw - event.relative.x * 0.022, -56.0, 56.0)
-		look_pitch = clampf(look_pitch - event.relative.y * 0.018, -18.0, 26.0)
+		if camera_mode == "lobby_walk":
+			lobby_walk_yaw -= event.relative.x * 0.045
+			lobby_walk_pitch = clampf(lobby_walk_pitch - event.relative.y * 0.035, -35.0, 22.0)
+		else:
+			look_yaw = clampf(look_yaw - event.relative.x * 0.022, -56.0, 56.0)
+			look_pitch = clampf(look_pitch - event.relative.y * 0.018, -18.0, 26.0)
 
 func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	if not is_inside_tree() or table_state.is_empty():
@@ -118,15 +126,15 @@ func set_table_state(table_state: Dictionary, my_seat: int) -> void:
 	var players := int(table_state.get("num_players", 0))
 	if players <= 0:
 		return
-	var map_id := "landing" if bool(table_state.get("menu_preview", false)) else str(table_state.get("map_id", "living_room"))
+	var phase := str(table_state.get("phase", ""))
+	var map_id := "landing" if bool(table_state.get("menu_preview", false)) or phase in ["connecting", "lobby"] else str(table_state.get("map_id", "living_room"))
 	if map_id != current_map_id:
 		_rebuild_map(map_id)
 	if players != seat_count:
 		_rebuild_seats(players)
 	local_seat = clampi(my_seat, 0, max(players - 1, 0))
-	var phase := str(table_state.get("phase", ""))
-	camera_mode = "seat" if phase in ["bidding", "playing", "trick_end", "round_end"] else "overview"
-	if camera_mode != "seat" and look_enabled:
+	camera_mode = "seat" if phase in ["bidding", "playing", "trick_end", "round_end"] else ("lobby_walk" if phase in ["connecting", "lobby"] else "overview")
+	if not (camera_mode in ["seat", "lobby_walk"]) and look_enabled:
 		look_enabled = false
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_seats(table_state, my_seat)
@@ -275,6 +283,10 @@ func _rebuild_map(map_id: String) -> void:
 		_build_jungle_map()
 	else:
 		_build_pirate_map()
+	if current_map_id == "landing":
+		lobby_walk_position = Vector3(0, 1.35, 3.6)
+		lobby_walk_yaw = 180.0
+		lobby_walk_pitch = -8.0
 
 func _set_world_colors(background: Color, ambient_color: Color, ambient_energy: float) -> void:
 	if world_environment and world_environment.environment:
@@ -1015,8 +1027,39 @@ func _apply_hand_card_transform(card: Node3D, index: int, count: int, hovered: b
 		-fan_turn
 	)
 
+func _update_lobby_walk(delta: float) -> void:
+	if camera_mode != "lobby_walk":
+		return
+	var input := Vector3.ZERO
+	if Input.is_key_pressed(KEY_W):
+		input.z -= 1.0
+	if Input.is_key_pressed(KEY_S):
+		input.z += 1.0
+	if Input.is_key_pressed(KEY_A):
+		input.x -= 1.0
+	if Input.is_key_pressed(KEY_D):
+		input.x += 1.0
+	if input == Vector3.ZERO:
+		return
+	input = input.normalized()
+	var yaw_radians := deg_to_rad(lobby_walk_yaw)
+	var forward := Vector3(-sin(yaw_radians), 0, -cos(yaw_radians)).normalized()
+	var right := Vector3(forward.z, 0, -forward.x).normalized()
+	lobby_walk_position += (forward * -input.z + right * input.x) * delta * 2.15
+	lobby_walk_position.x = clampf(lobby_walk_position.x, -3.65, 3.65)
+	lobby_walk_position.z = clampf(lobby_walk_position.z, -3.75, 4.25)
+	lobby_walk_position.y = 1.35
+
 func _update_camera() -> void:
 	if not camera:
+		return
+	if camera_mode == "lobby_walk":
+		camera.global_position = camera.global_position.lerp(lobby_walk_position, 0.2)
+		var yaw_radians := deg_to_rad(lobby_walk_yaw)
+		var pitch_radians := deg_to_rad(lobby_walk_pitch)
+		var forward := Vector3(-sin(yaw_radians) * cos(pitch_radians), sin(pitch_radians), -cos(yaw_radians) * cos(pitch_radians)).normalized()
+		camera.look_at(camera.global_position + forward, Vector3.UP)
+		camera.fov = lerpf(camera.fov, 58.0, 0.08)
 		return
 	if camera_mode != "seat" or local_seat >= seat_base_positions.size():
 		camera.position = camera.position.lerp(Vector3(0, 5.9, 6.4), 0.08)

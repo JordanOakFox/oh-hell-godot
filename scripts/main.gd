@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.17"
+const GAME_VERSION := "0.2.18"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -88,6 +88,7 @@ var status_label: Label
 var table_label: Label
 var player_hud_panel: PanelContainer
 var left_stats_label: Label
+var scoreboard_grid: GridContainer
 var net_row: HBoxContainer
 var advanced_net_row: HBoxContainer
 var advanced_network_button: Button
@@ -576,6 +577,10 @@ func _build_ui() -> void:
 	player_hud_margin.add_theme_constant_override("margin_bottom", 18)
 	player_hud_panel.add_child(player_hud_margin)
 
+	var scoreboard_box := VBoxContainer.new()
+	scoreboard_box.add_theme_constant_override("separation", 14)
+	player_hud_margin.add_child(scoreboard_box)
+
 	left_stats_label = Label.new()
 	left_stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	left_stats_label.add_theme_font_size_override("font_size", 16)
@@ -584,7 +589,14 @@ func _build_ui() -> void:
 	left_stats_label.add_theme_constant_override("shadow_offset_x", 1)
 	left_stats_label.add_theme_constant_override("shadow_offset_y", 1)
 	left_stats_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	player_hud_margin.add_child(left_stats_label)
+	scoreboard_box.add_child(left_stats_label)
+
+	scoreboard_grid = GridContainer.new()
+	scoreboard_grid.columns = 4
+	scoreboard_grid.add_theme_constant_override("h_separation", 28)
+	scoreboard_grid.add_theme_constant_override("v_separation", 8)
+	scoreboard_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scoreboard_box.add_child(scoreboard_grid)
 
 	var center_column := VBoxContainer.new()
 	center_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1207,7 +1219,7 @@ func _render() -> void:
 	]
 	_render_trump_symbol()
 	if player_hud_panel.visible:
-		left_stats_label.text = _scoreboard_text()
+		_render_scoreboard_panel()
 	table_label.text = _game_prompt_text()
 
 	_render_trick()
@@ -1328,10 +1340,10 @@ func _render_lobby() -> void:
 
 func _lobby_help_text() -> String:
 	if _view_lobby_can_start():
-		return "Everyone is ready. Start Game when the table is set."
+		return "Everyone is ready. Start Game when the table is set.\nLobby: WASD moves, right mouse drag looks around."
 	if view_state["connected"][my_seat] and not view_state["ready"][my_seat]:
-		return "Pick your settings, then press Ready."
-	return "Waiting for seats to fill and players to ready up."
+		return "Pick your settings, then press Ready.\nLobby: WASD moves, right mouse drag looks around."
+	return "Waiting for seats to fill and players to ready up.\nLobby: WASD moves, right mouse drag looks around."
 
 func _render_trick() -> void:
 	for child in trick_box.get_children():
@@ -1618,9 +1630,12 @@ func _sync_scoreboard_visibility() -> void:
 	var can_show := phase in ["bidding", "playing", "trick_end", "round_end"]
 	player_hud_panel.visible = scoreboard_visible and can_show
 	if player_hud_panel.visible and left_stats_label:
-		left_stats_label.text = _scoreboard_text()
+		_render_scoreboard_panel()
 	elif left_stats_label:
 		left_stats_label.text = ""
+		if scoreboard_grid:
+			for child in scoreboard_grid.get_children():
+				child.queue_free()
 
 func _sync_turn_banner() -> void:
 	if not turn_banner_panel or not turn_banner_label or view_state.is_empty():
@@ -1709,6 +1724,70 @@ func _scoreboard_text() -> String:
 	lines.append("")
 	lines.append("Press Tab to close.")
 	return "\n".join(lines)
+
+func _render_scoreboard_panel() -> void:
+	if not left_stats_label or not scoreboard_grid:
+		return
+	for child in scoreboard_grid.get_children():
+		child.queue_free()
+	var names: Array = view_state.get("names", [])
+	var scores: Array = view_state.get("scores", [])
+	var bids: Array = view_state.get("bids", [])
+	var submitted: Array = view_state.get("bid_submitted", [])
+	var tricks: Array = view_state.get("tricks_won", [])
+	var active := int(view_state.get("active_player", -1))
+	var phase := str(view_state.get("phase", ""))
+	var round_number := int(view_state.get("round_index", 0)) + 1
+	var round_sequence: Array = view_state.get("sequence", [])
+	var round_total := round_sequence.size()
+	var round_cards := 0
+	if round_number - 1 < round_sequence.size():
+		round_cards = int(round_sequence[round_number - 1])
+	left_stats_label.text = "SCOREBOARD\nRound %d / %d    Cards %d" % [round_number, round_total, round_cards]
+	_add_scoreboard_cell("PLAYER", true, HORIZONTAL_ALIGNMENT_LEFT)
+	_add_scoreboard_cell("PTS", true)
+	_add_scoreboard_cell("BID", true)
+	_add_scoreboard_cell("TRICKS", true)
+	for seat in range(names.size()):
+		var name := _scoreboard_name(str(names[seat]), seat)
+		if seat == active:
+			name = "> " + name
+		else:
+			name = "  " + name
+		var points := int(scores[seat]) if seat < scores.size() else 0
+		var bid_text := _scoreboard_bid_text(seat, bids, submitted, phase)
+		var trick_count := int(tricks[seat]) if seat < tricks.size() else 0
+		_add_scoreboard_cell(name, false, HORIZONTAL_ALIGNMENT_LEFT, seat == active)
+		_add_scoreboard_cell(str(points), false, HORIZONTAL_ALIGNMENT_CENTER, seat == active)
+		_add_scoreboard_cell(bid_text, false, HORIZONTAL_ALIGNMENT_CENTER, seat == active)
+		_add_scoreboard_cell(str(trick_count), false, HORIZONTAL_ALIGNMENT_CENTER, seat == active)
+	_add_scoreboard_hint()
+
+func _add_scoreboard_cell(text: String, header := false, align := HORIZONTAL_ALIGNMENT_CENTER, active := false) -> void:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = align
+	label.custom_minimum_size = Vector2(170 if align == HORIZONTAL_ALIGNMENT_LEFT else 58, 0)
+	label.add_theme_font_size_override("font_size", 18 if header else 20)
+	label.add_theme_color_override("font_color", Color("#ffe18f") if active else Color("#f7f1e3"))
+	label.add_theme_color_override("font_shadow_color", Color("#050807"))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	scoreboard_grid.add_child(label)
+
+func _add_scoreboard_hint() -> void:
+	var spacer_count := 4 - (scoreboard_grid.get_child_count() % 4)
+	if spacer_count < 4:
+		for _i in range(spacer_count):
+			_add_scoreboard_cell("")
+	var hint := Label.new()
+	hint.text = "Press Tab to close."
+	hint.add_theme_font_size_override("font_size", 18)
+	hint.add_theme_color_override("font_color", Color("#f7f1e3"))
+	hint.add_theme_color_override("font_shadow_color", Color("#050807"))
+	hint.add_theme_constant_override("shadow_offset_x", 1)
+	hint.add_theme_constant_override("shadow_offset_y", 1)
+	scoreboard_grid.add_child(hint)
 
 func _scoreboard_name(name: String, seat: int) -> String:
 	var label := name

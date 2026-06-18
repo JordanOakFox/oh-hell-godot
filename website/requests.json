@@ -3,7 +3,7 @@
     "title": "Cleaner table UI and prompts",
     "requestedBy": "Jordan",
     "status": "done",
-    "note": "Added in v0.2.17 with cleaner lobby text, gameplay prompts, and round history."
+    "note": "Added through v0.2.18 with cleaner lobby text, gameplay prompts, round history, and a column-based scoreboard."
   },
   {
     "title": "Family download hub",
