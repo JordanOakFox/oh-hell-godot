@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.15"
+const GAME_VERSION := "0.2.16"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -104,6 +104,8 @@ var animal_picker: OptionButton
 var bot_personality_picker: OptionButton
 var rules_panel: PanelContainer
 var history_button: Button
+var turn_banner_panel: PanelContainer
+var turn_banner_label: Label
 var round_history_panel: PanelContainer
 var round_history_label: Label
 var settings_row: HBoxContainer
@@ -148,6 +150,11 @@ func _ready() -> void:
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	_create_offline_lobby()
 	_apply_command_line_mode()
+
+func _process(_delta: float) -> void:
+	if turn_banner_panel and turn_banner_panel.visible:
+		var pulse := 0.72 + absf(sin(Time.get_ticks_msec() / 140.0)) * 0.28
+		turn_banner_panel.modulate = Color(1, 1, 1, pulse)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
@@ -442,8 +449,40 @@ func _build_ui() -> void:
 	history_button.offset_bottom = 120
 	history_button.text = "History"
 	history_button.visible = false
+	_style_command_button(history_button)
 	history_button.pressed.connect(_toggle_round_history)
 	add_child(history_button)
+
+	turn_banner_panel = PanelContainer.new()
+	turn_banner_panel.anchor_left = 0.5
+	turn_banner_panel.anchor_top = 0.0
+	turn_banner_panel.anchor_right = 0.5
+	turn_banner_panel.anchor_bottom = 0.0
+	turn_banner_panel.offset_left = -190
+	turn_banner_panel.offset_top = 78
+	turn_banner_panel.offset_right = 190
+	turn_banner_panel.offset_bottom = 122
+	turn_banner_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	turn_banner_panel.add_theme_stylebox_override("panel", _panel_style(Color("#171f18f0"), Color("#ffe18fcc"), 8, 2))
+	turn_banner_panel.visible = false
+	add_child(turn_banner_panel)
+
+	var turn_banner_margin := MarginContainer.new()
+	turn_banner_margin.add_theme_constant_override("margin_left", 14)
+	turn_banner_margin.add_theme_constant_override("margin_top", 7)
+	turn_banner_margin.add_theme_constant_override("margin_right", 14)
+	turn_banner_margin.add_theme_constant_override("margin_bottom", 7)
+	turn_banner_panel.add_child(turn_banner_margin)
+
+	turn_banner_label = Label.new()
+	turn_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	turn_banner_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	turn_banner_label.add_theme_font_size_override("font_size", 21)
+	turn_banner_label.add_theme_color_override("font_color", Color("#ffe18f"))
+	turn_banner_label.add_theme_color_override("font_shadow_color", Color("#050807"))
+	turn_banner_label.add_theme_constant_override("shadow_offset_x", 2)
+	turn_banner_label.add_theme_constant_override("shadow_offset_y", 2)
+	turn_banner_margin.add_child(turn_banner_label)
 
 	settings_row = HBoxContainer.new()
 	settings_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -522,19 +561,19 @@ func _build_ui() -> void:
 	player_hud_panel.anchor_right = 0.5
 	player_hud_panel.anchor_bottom = 0.5
 	player_hud_panel.offset_left = -260
-	player_hud_panel.offset_top = -218
+	player_hud_panel.offset_top = -230
 	player_hud_panel.offset_right = 260
-	player_hud_panel.offset_bottom = 218
+	player_hud_panel.offset_bottom = 230
 	player_hud_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	player_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color("#101820f2"), Color("#f0d28acc"), 8, 2))
+	player_hud_panel.add_theme_stylebox_override("panel", _panel_style(Color("#0e151af7"), Color("#f0d28add"), 8, 2))
 	player_hud_panel.visible = false
 	add_child(player_hud_panel)
 
 	var player_hud_margin := MarginContainer.new()
-	player_hud_margin.add_theme_constant_override("margin_left", 12)
-	player_hud_margin.add_theme_constant_override("margin_top", 9)
-	player_hud_margin.add_theme_constant_override("margin_right", 12)
-	player_hud_margin.add_theme_constant_override("margin_bottom", 9)
+	player_hud_margin.add_theme_constant_override("margin_left", 24)
+	player_hud_margin.add_theme_constant_override("margin_top", 20)
+	player_hud_margin.add_theme_constant_override("margin_right", 24)
+	player_hud_margin.add_theme_constant_override("margin_bottom", 18)
 	player_hud_panel.add_child(player_hud_margin)
 
 	left_stats_label = Label.new()
@@ -664,6 +703,15 @@ func _panel_style(fill: Color, border: Color, radius: int, border_width: int) ->
 	style.shadow_size = 8
 	style.shadow_offset = Vector2(0, 3)
 	return style
+
+func _style_command_button(button: Button, accent := false) -> void:
+	button.add_theme_font_size_override("font_size", 16)
+	button.add_theme_color_override("font_color", Color("#fff8df"))
+	button.add_theme_color_override("font_hover_color", Color("#ffffff"))
+	button.add_theme_stylebox_override("normal", _panel_style(Color("#3b2b1ce6") if not accent else Color("#7a4d1fe8"), Color("#f0d28a88"), 5, 1))
+	button.add_theme_stylebox_override("hover", _panel_style(Color("#514024ee") if not accent else Color("#9b672bee"), Color("#ffe18fcc"), 5, 1))
+	button.add_theme_stylebox_override("pressed", _panel_style(Color("#24180fe8"), Color("#ffe18f"), 5, 1))
+	button.add_theme_stylebox_override("disabled", _panel_style(Color("#24272099"), Color("#f0d28a33"), 5, 1))
 
 func _on_host_pressed() -> void:
 	_read_lobby_inputs()
@@ -1098,6 +1146,7 @@ func _render() -> void:
 		history_button.text = "Hide History" if round_history_visible else "History"
 	_sync_scoreboard_visibility()
 	_sync_round_history_visibility()
+	_sync_turn_banner()
 	if fireworks_overlay:
 		fireworks_overlay.set_celebrating(view_state.get("phase", "") == "game_end")
 	if view_state["phase"] == "connecting":
@@ -1110,6 +1159,7 @@ func _render() -> void:
 		scoreboard_visible = false
 		_sync_scoreboard_visibility()
 		_sync_round_history_visibility()
+		_sync_turn_banner()
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		table_label.text = view_state["message"]
@@ -1126,6 +1176,7 @@ func _render() -> void:
 		scoreboard_visible = false
 		_sync_scoreboard_visibility()
 		_sync_round_history_visibility()
+		_sync_turn_banner()
 		left_stats_label.text = ""
 		right_info_label.text = ""
 		_render_lobby()
@@ -1296,6 +1347,7 @@ func _render_actions() -> void:
 		if view_state["connected"][my_seat]:
 			var ready_button := Button.new()
 			ready_button.text = "Unready" if view_state["ready"][my_seat] else "Ready"
+			_style_command_button(ready_button, not view_state["ready"][my_seat])
 			ready_button.pressed.connect(_request_toggle_ready)
 			action_box.add_child(ready_button)
 
@@ -1303,6 +1355,7 @@ func _render_actions() -> void:
 			var start_button := Button.new()
 			start_button.text = "Start Game"
 			start_button.disabled = not _view_lobby_can_start()
+			_style_command_button(start_button, true)
 			start_button.pressed.connect(_request_start_game)
 			action_box.add_child(start_button)
 
@@ -1327,6 +1380,7 @@ func _render_actions() -> void:
 			var button := Button.new()
 			button.text = str(amount)
 			button.set_meta("bid", amount)
+			_style_command_button(button, true)
 			button.pressed.connect(_on_bid_button_pressed.bind(button))
 			action_box.add_child(button)
 	elif view_state["phase"] == "trick_end":
@@ -1337,12 +1391,14 @@ func _render_actions() -> void:
 	elif view_state["phase"] == "round_end":
 		var next_round := Button.new()
 		next_round.text = "Next round"
+		_style_command_button(next_round, true)
 		next_round.pressed.connect(_request_next_round)
 		action_box.add_child(next_round)
 	elif view_state["phase"] == "game_end":
 		var play_again := Button.new()
 		play_again.text = "Waiting..." if view_state["play_again"][my_seat] else "Play Again"
 		play_again.disabled = view_state["play_again"][my_seat]
+		_style_command_button(play_again, true)
 		play_again.pressed.connect(_request_play_again)
 		action_box.add_child(play_again)
 
@@ -1354,6 +1410,7 @@ func _render_actions() -> void:
 	if _can_request_end_game():
 		var end_button := Button.new()
 		end_button.text = "End Game"
+		_style_command_button(end_button)
 		end_button.pressed.connect(_request_end_game)
 		action_box.add_child(end_button)
 
@@ -1543,6 +1600,23 @@ func _sync_scoreboard_visibility() -> void:
 	elif left_stats_label:
 		left_stats_label.text = ""
 
+func _sync_turn_banner() -> void:
+	if not turn_banner_panel or not turn_banner_label or view_state.is_empty():
+		return
+	var phase := str(view_state.get("phase", ""))
+	var should_show := false
+	var text := ""
+	var submitted: Array = view_state.get("bid_submitted", [])
+	if phase == "playing" and int(view_state.get("active_player", -1)) == my_seat:
+		should_show = true
+		text = "YOUR TURN - PLAY A CARD"
+	elif phase == "bidding" and my_seat < submitted.size() and not bool(submitted[my_seat]):
+		should_show = true
+		text = "YOUR BID - CHOOSE A NUMBER"
+	turn_banner_panel.visible = should_show
+	turn_banner_panel.modulate = Color.WHITE
+	turn_banner_label.text = text
+
 func _sync_round_history_visibility() -> void:
 	if not round_history_panel:
 		return
@@ -1562,23 +1636,54 @@ func _scoreboard_text() -> String:
 	var tricks: Array = view_state.get("tricks_won", [])
 	var active := int(view_state.get("active_player", -1))
 	var phase := str(view_state.get("phase", ""))
-	var lines := ["SCOREBOARD", "Player              Pts   Bid   Trk"]
+	var round_number := int(view_state.get("round_index", 0)) + 1
+	var round_sequence: Array = view_state.get("sequence", [])
+	var round_total := round_sequence.size()
+	var round_cards := 0
+	if round_number - 1 < round_sequence.size():
+		round_cards = int(round_sequence[round_number - 1])
+	var lines := [
+		"SCOREBOARD",
+		"Round %d / %d    Cards %d" % [round_number, round_total, round_cards],
+		"",
+		"   PLAYER               PTS   BID   TRICKS",
+	]
 	for seat in range(names.size()):
 		var name := _scoreboard_name(str(names[seat]), seat)
 		var points := int(scores[seat]) if seat < scores.size() else 0
 		var bid_text := _scoreboard_bid_text(seat, bids, submitted, phase)
 		var trick_count := int(tricks[seat]) if seat < tricks.size() else 0
 		var marker := ">" if seat == active else " "
-		lines.append("%s %s  %d   %s   %d" % [marker, name, points, bid_text, trick_count])
+		lines.append("%s  %s %s   %s   %s" % [
+			marker,
+			_pad_right(name, 18),
+			_pad_left(str(points), 3),
+			_pad_left(bid_text, 3),
+			_pad_left(str(trick_count), 5),
+		])
+	lines.append("")
+	lines.append("Press Tab to close.")
 	return "\n".join(lines)
 
 func _scoreboard_name(name: String, seat: int) -> String:
 	var label := name
 	if seat == my_seat:
 		label += " (You)"
-	if label.length() > 16:
-		return label.substr(0, 15) + "."
+	if label.length() > 18:
+		return label.substr(0, 17) + "."
 	return label
+
+func _pad_right(value: String, width: int) -> String:
+	var output := value
+	while output.length() < width:
+		output += " "
+	return output
+
+func _pad_left(value: String, width: int) -> String:
+	var output := value
+	while output.length() < width:
+		output = " " + output
+	return output
 
 func _scoreboard_bid_text(seat: int, bids: Array, submitted: Array, phase: String) -> String:
 	if phase == "bidding":
