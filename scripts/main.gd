@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.21"
+const GAME_VERSION := "0.2.22"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -1439,10 +1439,10 @@ func _render_lobby() -> void:
 
 func _lobby_help_text() -> String:
 	if _view_lobby_can_start():
-		return "Everyone is ready. Start Game when the table is set.\nLobby: WASD moves, right mouse drag looks around."
+		return "Everyone is ready. Start Game when the table is set.\nControls: WASD move  |  Right-drag look  |  Esc closes panels."
 	if view_state["connected"][my_seat] and not view_state["ready"][my_seat]:
-		return "Pick your settings, then press Ready.\nLobby: WASD moves, right mouse drag looks around."
-	return "Waiting for seats to fill and players to ready up.\nLobby: WASD moves, right mouse drag looks around."
+		return "Choose your animal/settings, then press Ready.\nControls: WASD move  |  Right-drag look  |  M mute."
+	return "Waiting for seats to fill and players to ready up.\nControls: WASD move  |  Right-drag look  |  Esc closes panels."
 
 func _render_trick() -> void:
 	for child in trick_box.get_children():
@@ -1893,7 +1893,7 @@ func _add_scoreboard_hint() -> void:
 		for _i in range(spacer_count):
 			_add_scoreboard_cell("")
 	var hint := Label.new()
-	hint.text = "Press Tab to close."
+	hint.text = "Press Tab or Esc to close."
 	hint.add_theme_font_size_override("font_size", 18)
 	hint.add_theme_color_override("font_color", Color("#f7f1e3"))
 	hint.add_theme_color_override("font_shadow_color", Color("#050807"))

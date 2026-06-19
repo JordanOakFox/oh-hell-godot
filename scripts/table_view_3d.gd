@@ -448,16 +448,16 @@ func _attach_lobby_area() -> void:
 	trick_root = Node3D.new()
 	ship_root.add_child(trick_root)
 
-	var ready_sign := _box(Vector3(1.25, 0.75, 0.08), Color("#172022"))
+	var ready_sign := _box(Vector3(1.55, 0.92, 0.08), Color("#172022"))
 	ready_sign.position = Vector3(-2.6, 0.65, 2.7)
 	ship_root.add_child(ready_sign)
 	var ready_label := Label3D.new()
-	ready_label.text = "Ready Up\nbutton below"
-	ready_label.font_size = 32
+	ready_label.text = "LOBBY\nWASD MOVE\nRIGHT DRAG LOOK"
+	ready_label.font_size = 24
 	ready_label.modulate = Color("#ffe18f")
 	ready_label.outline_size = 6
 	ready_label.outline_modulate = Color("#17110c")
-	ready_label.position = Vector3(-2.6, 0.74, 2.64)
+	ready_label.position = Vector3(-2.6, 0.78, 2.64)
 	ready_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	ship_root.add_child(ready_label)
 
@@ -853,7 +853,7 @@ func _update_seats(table_state: Dictionary, my_seat: int) -> void:
 			var lobby_status := avatar.get_node_or_null("Score") as Label3D
 			if lobby_status:
 				var ready: Array = table_state.get("ready", [])
-				lobby_status.text = "ready" if seat < ready.size() and bool(ready[seat]) else "not ready"
+				lobby_status.text = "Ready" if seat < ready.size() and bool(ready[seat]) else "Waiting"
 				lobby_status.modulate = Color("#93df9d") if seat < ready.size() and bool(ready[seat]) else Color("#fff6d8")
 			avatar.visible = seat != my_seat and (seat >= connected.size() or bool(connected[seat]))
 			seat_moods[seat] = "neutral"
