@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.20"
+const GAME_VERSION := "0.2.21"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -83,6 +83,7 @@ var scoreboard_visible := false
 var last_sound_serial := 0
 var lobby_avatar_send_timer := 0.0
 var last_lobby_avatar_signature := ""
+var end_game_confirm_until := 0
 
 var title_label: Label
 var version_label: Label
@@ -157,11 +158,15 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_lobby_avatar_sync(delta)
+	_sync_end_game_button()
 	if turn_banner_panel and turn_banner_panel.visible:
 		var pulse := 0.72 + absf(sin(Time.get_ticks_msec() / 140.0)) * 0.28
 		turn_banner_panel.modulate = Color(1, 1, 1, pulse)
 
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		if _handle_escape_pressed():
+			return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_M:
 		_toggle_mute_shortcut()
 		return
@@ -803,6 +808,33 @@ func _toggle_mute_shortcut() -> void:
 	if not muted:
 		_play_sfx("click")
 
+func _handle_escape_pressed() -> bool:
+	var handled := false
+	if table_view_3d and table_view_3d.has_method("is_mouse_look_enabled") and table_view_3d.is_mouse_look_enabled():
+		if table_view_3d.has_method("release_mouse_look"):
+			table_view_3d.release_mouse_look()
+		handled = true
+	if settings_visible:
+		settings_visible = false
+		handled = true
+	if rules_visible:
+		rules_visible = false
+		handled = true
+	if round_history_visible:
+		round_history_visible = false
+		handled = true
+	if scoreboard_visible:
+		scoreboard_visible = false
+		handled = true
+	if handled:
+		_sync_settings_visibility()
+		_sync_rules_visibility()
+		_sync_round_history_visibility()
+		_sync_scoreboard_visibility()
+		_set_3d_card_hover(-1)
+		_play_sfx("click")
+	return handled
+
 func _on_music_volume_changed(value: float) -> void:
 	Profile.set_music_volume(value / 100.0)
 	if value > 0.0 and Profile.music_muted():
@@ -1222,6 +1254,7 @@ func _render() -> void:
 		history_button.text = "Hide History" if round_history_visible else "History"
 	if end_game_button:
 		end_game_button.visible = _can_request_end_game()
+		_sync_end_game_button()
 	_sync_scoreboard_visibility()
 	_sync_round_history_visibility()
 	_sync_turn_banner()
@@ -1460,7 +1493,13 @@ func _render_actions() -> void:
 			action_box.add_child(start_button)
 
 		var waiting := Label.new()
-		waiting.text = "Players: %d / %d" % [connected_count, view_state["num_players"]]
+		var ready_count := _view_ready_count()
+		waiting.text = "Players: %d / %d   Ready: %d / %d" % [
+			connected_count,
+			view_state["num_players"],
+			ready_count,
+			connected_count,
+		]
 		waiting.add_theme_color_override("font_color", Color("#f7f1e3"))
 		action_box.add_child(waiting)
 	elif view_state["phase"] == "connecting":
@@ -1618,6 +1657,17 @@ func _view_connected_count() -> int:
 	var count := 0
 	for connected in view_state["connected"]:
 		if connected:
+			count += 1
+	return count
+
+func _view_ready_count() -> int:
+	if not view_state.has("ready") or not view_state.has("connected"):
+		return 0
+	var count := 0
+	var connected: Array = view_state.get("connected", [])
+	var ready: Array = view_state.get("ready", [])
+	for seat in range(min(connected.size(), ready.size())):
+		if bool(connected[seat]) and bool(ready[seat]):
 			count += 1
 	return count
 
@@ -3001,7 +3051,22 @@ func _can_request_end_game() -> bool:
 		return true
 	return my_seat == _table_host_seat_from_view()
 
+func _sync_end_game_button() -> void:
+	if not end_game_button:
+		return
+	var confirming := Time.get_ticks_msec() < end_game_confirm_until
+	end_game_button.text = "Confirm End" if confirming else "End Game"
+
 func _request_end_game() -> void:
+	var now := Time.get_ticks_msec()
+	if now >= end_game_confirm_until:
+		end_game_confirm_until = now + 2800
+		_sync_end_game_button()
+		_set_status("Press Confirm End to stop this game.")
+		_play_sfx("click")
+		return
+	end_game_confirm_until = 0
+	_sync_end_game_button()
 	if multiplayer.multiplayer_peer and not multiplayer.is_server():
 		_server_end_game.rpc_id(1)
 	else:

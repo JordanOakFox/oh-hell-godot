@@ -168,6 +168,11 @@ func set_emote_event(event) -> void:
 func is_mouse_look_enabled() -> bool:
 	return look_enabled
 
+func release_mouse_look() -> void:
+	look_enabled = false
+	skip_next_mouse_motion = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
 func get_lobby_avatar_state() -> Dictionary:
 	return {
 		"x": lobby_walk_position.x,
