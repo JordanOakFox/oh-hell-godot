@@ -448,6 +448,39 @@ func _attach_lobby_area() -> void:
 	ship_root.add_child(seat_root)
 	trick_root = Node3D.new()
 	ship_root.add_child(trick_root)
+	_add_lobby_controls_sign()
+
+func _add_lobby_controls_sign() -> void:
+	var sign_root := Node3D.new()
+	sign_root.position = Vector3(-2.85, 0.55, 1.35)
+	sign_root.rotation_degrees.y = -10.0
+	ship_root.add_child(sign_root)
+
+	var board := _box(Vector3(2.25, 0.82, 0.08), Color("#253431"))
+	board.position = Vector3(0, 0.42, 0)
+	sign_root.add_child(board)
+
+	var trim := _box(Vector3(2.38, 0.92, 0.035), Color("#f0d28a"))
+	trim.position = Vector3(0, 0.42, 0.035)
+	sign_root.add_child(trim)
+	board.position.z = 0.065
+
+	for x in [-0.96, 0.96]:
+		var post := _box(Vector3(0.08, 0.7, 0.08), Color("#5d3a22"))
+		post.position = Vector3(x, -0.05, 0)
+		sign_root.add_child(post)
+
+	var label := Label3D.new()
+	label.text = "LOBBY CONTROLS\nWASD TO MOVE\nRIGHT-DRAG TO LOOK"
+	label.font_size = 42
+	label.pixel_size = 0.006
+	label.modulate = Color("#f7f1e3")
+	label.outline_size = 6
+	label.outline_modulate = Color("#0b1110")
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = false
+	label.position = Vector3(0, 0.48, 0.13)
+	sign_root.add_child(label)
 
 func _build_space_map() -> void:
 	table_felt_color = Color("#15204f")

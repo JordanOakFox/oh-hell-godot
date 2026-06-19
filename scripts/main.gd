@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.23"
+const GAME_VERSION := "0.2.24"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -1533,6 +1533,10 @@ func _render_actions() -> void:
 		_style_command_button(next_round, true)
 		next_round.pressed.connect(_request_next_round)
 		action_box.add_child(next_round)
+		var auto_note := Label.new()
+		auto_note.text = "Auto-continues after 10 seconds."
+		auto_note.add_theme_color_override("font_color", Color("#f7f1e3"))
+		action_box.add_child(auto_note)
 	elif view_state["phase"] == "game_end":
 		var play_again := Button.new()
 		play_again.text = "Waiting..." if view_state["play_again"][my_seat] else "Play Again"
@@ -1786,8 +1790,28 @@ func _game_prompt_text() -> String:
 	if phase == "trick_end":
 		return "%s\nNext trick starts automatically." % str(view_state.get("message", ""))
 	if phase == "round_end":
-		return "%s\nReview the round, then continue." % str(view_state.get("message", ""))
+		return "%s\n%s\nNext round starts automatically in 10 seconds." % [
+			str(view_state.get("message", "")),
+			_round_end_summary_text(),
+		]
 	return str(view_state.get("message", ""))
+
+func _round_end_summary_text() -> String:
+	var bids: Array = view_state.get("bids", [])
+	var tricks: Array = view_state.get("tricks_won", [])
+	if my_seat < 0 or my_seat >= bids.size() or my_seat >= tricks.size() or bids[my_seat] == null:
+		return "Round results are in."
+	var bid := int(bids[my_seat])
+	var won := int(tricks[my_seat])
+	var delta := 10 + bid if bid == won else 0
+	var result := "Made it" if bid == won else "Busted"
+	return "%s: you bid %d and won %d trick%s. +%d points this round." % [
+		result,
+		bid,
+		won,
+		"" if won == 1 else "s",
+		delta,
+	]
 
 func _sync_round_history_visibility() -> void:
 	if not round_history_panel:
@@ -2495,6 +2519,8 @@ func _continue_after_trick() -> void:
 		state["message"] = "%s leads." % state["names"][state["leader"]]
 		_advance_bot_turn_serial()
 	_publish_state()
+	if state.get("phase", "") == "round_end":
+		_schedule_auto_next_round_after_round_end(state["round_index"])
 	_schedule_bot_action()
 
 func _advance_bot_turn_serial() -> void:
@@ -2512,12 +2538,22 @@ func _server_next_round() -> void:
 	_next_round()
 
 func _next_round() -> void:
+	if state.get("phase", "") != "round_end":
+		return
 	state["round_index"] += 1
 	state["dealer"] = (state["dealer"] + 1) % state["num_players"]
 	if state["round_index"] >= state["sequence"].size():
 		_end_game()
 		return
 	_begin_round()
+
+func _schedule_auto_next_round_after_round_end(round_index: int) -> void:
+	await get_tree().create_timer(10.0).timeout
+	if state.get("phase", "") != "round_end":
+		return
+	if int(state.get("round_index", -1)) != round_index:
+		return
+	_next_round()
 
 func _schedule_bot_action() -> void:
 	if not multiplayer.multiplayer_peer or not multiplayer.is_server():
