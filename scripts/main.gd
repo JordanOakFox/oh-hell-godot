@@ -1,7 +1,7 @@
 extends Control
 
 const STARTING_NAMES := ["Player 1", "Player 2", "Player 3", "Player 4"]
-const GAME_VERSION := "0.2.22"
+const GAME_VERSION := "0.2.23"
 const ANIMAL_IDS := ["bunny", "lizard", "lion", "tiger", "bear", "fox", "dog", "cat"]
 const BOT_PERSONALITY_IDS := ["casual", "smart", "ruthless"]
 const BOT_PERSONALITY_NAMES := {
@@ -3252,7 +3252,7 @@ func _default_lobby_avatars(count: int) -> Array:
 		avatars.append({
 			"x": -2.8 + float(seat % columns) * 1.4,
 			"z": 2.75 - float(seat / columns) * 1.05,
-			"yaw": 180.0,
+			"yaw": 0.0,
 		})
 	return avatars
 

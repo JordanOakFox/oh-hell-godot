@@ -56,9 +56,9 @@ var skip_next_mouse_motion := false
 var look_yaw := 0.0
 var look_pitch := -10.0
 var lobby_walk_position := Vector3(0, 1.35, 3.6)
-var lobby_walk_yaw := 180.0
+var lobby_walk_yaw := 0.0
 var lobby_walk_pitch := -8.0
-var lobby_avatar_yaw := 180.0
+var lobby_avatar_yaw := 0.0
 var hand_signature := ""
 var hovered_hand_index := -1
 var current_map_id := "landing"
@@ -299,8 +299,9 @@ func _rebuild_map(map_id: String) -> void:
 		_build_pirate_map()
 	if current_map_id == "landing":
 		lobby_walk_position = Vector3(0, 1.35, 3.6)
-		lobby_walk_yaw = 180.0
+		lobby_walk_yaw = 0.0
 		lobby_walk_pitch = -8.0
+		lobby_avatar_yaw = 0.0
 
 func _set_world_colors(background: Color, ambient_color: Color, ambient_energy: float) -> void:
 	if world_environment and world_environment.environment:
@@ -447,19 +448,6 @@ func _attach_lobby_area() -> void:
 	ship_root.add_child(seat_root)
 	trick_root = Node3D.new()
 	ship_root.add_child(trick_root)
-
-	var ready_sign := _box(Vector3(1.55, 0.92, 0.08), Color("#172022"))
-	ready_sign.position = Vector3(-2.6, 0.65, 2.7)
-	ship_root.add_child(ready_sign)
-	var ready_label := Label3D.new()
-	ready_label.text = "LOBBY\nWASD MOVE\nRIGHT DRAG LOOK"
-	ready_label.font_size = 24
-	ready_label.modulate = Color("#ffe18f")
-	ready_label.outline_size = 6
-	ready_label.outline_modulate = Color("#17110c")
-	ready_label.position = Vector3(-2.6, 0.78, 2.64)
-	ready_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	ship_root.add_child(ready_label)
 
 func _build_space_map() -> void:
 	table_felt_color = Color("#15204f")
