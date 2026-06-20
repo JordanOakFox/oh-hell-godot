@@ -1,7 +1,7 @@
 {
-  "version": "v0.2.24",
-  "windowsBuild": "OhHell-Windows-v0.2.24.zip",
-  "macosBuild": "OhHell-macOS-v0.2.24.zip",
+  "version": "v0.3.0",
+  "windowsBuild": "OhHell-Windows-v0.3.0.zip",
+  "macosBuild": "OhHell-macOS-v0.3.0.zip",
   "serverAddress": "147.224.130.79",
-  "lastUpdated": "June 18, 2026"
+  "lastUpdated": "June 19, 2026"
 }

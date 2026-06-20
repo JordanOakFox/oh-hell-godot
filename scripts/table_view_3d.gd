@@ -472,14 +472,14 @@ func _add_lobby_controls_sign() -> void:
 
 	var label := Label3D.new()
 	label.text = "LOBBY CONTROLS\nWASD TO MOVE\nRIGHT-DRAG TO LOOK"
-	label.font_size = 42
-	label.pixel_size = 0.006
+	label.font_size = 34
+	label.pixel_size = 0.0046
 	label.modulate = Color("#f7f1e3")
-	label.outline_size = 6
+	label.outline_size = 4
 	label.outline_modulate = Color("#0b1110")
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	label.no_depth_test = false
-	label.position = Vector3(0, 0.48, 0.13)
+	label.position = Vector3(0, 0.45, 0.13)
 	sign_root.add_child(label)
 
 func _build_space_map() -> void:
